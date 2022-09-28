@@ -17,16 +17,12 @@ namespace Microsoft.DotNet.DarcLib
 {
     public class LocalGitClient : ILocalGitRepo
     {
+        private readonly IProcessManager _processManager;
         private readonly ILogger _logger;
-        private readonly string _gitExecutable;
 
-        /// <summary>
-        ///     Construct a new local git client
-        /// </summary>
-        /// <param name="path">Current path</param>
-        public LocalGitClient(string gitExecutable, ILogger logger)
+        public LocalGitClient(IProcessManager processManager, ILogger logger)
         {
-            _gitExecutable = gitExecutable;
+            _processManager = processManager;
             _logger = logger;
         }
 
