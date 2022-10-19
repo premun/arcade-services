@@ -26,7 +26,6 @@ public abstract class VmrManagerBase : IVmrManager
     private readonly IVmrInfo _vmrInfo;
     private readonly IVmrDependencyTracker _dependencyInfo;
     private readonly IProcessManager _processManager;
-    private readonly IRemoteFactory _remoteFactory;
     private readonly ILocalGitRepo _localGitRepo;
     private readonly IVersionDetailsParser _versionDetailsParser;
     private readonly ILogger _logger;
@@ -37,7 +36,6 @@ public abstract class VmrManagerBase : IVmrManager
         IVmrInfo vmrInfo,
         IVmrDependencyTracker dependencyInfo,
         IProcessManager processManager,
-        IRemoteFactory remoteFactory,
         ILocalGitRepo localGitRepo,
         IVersionDetailsParser versionDetailsParser,
         ILogger<VmrUpdater> logger)
@@ -46,7 +44,6 @@ public abstract class VmrManagerBase : IVmrManager
         _vmrInfo = vmrInfo;
         _dependencyInfo = dependencyInfo;
         _processManager = processManager;
-        _remoteFactory = remoteFactory;
         _localGitRepo = localGitRepo;
         _versionDetailsParser = versionDetailsParser;
     }
@@ -57,7 +54,7 @@ public abstract class VmrManagerBase : IVmrManager
     /// </summary>
     /// <param name="mapping">Repository mapping</param>
     /// <returns>Path to the cloned repo</returns>
-    protected async Task<string> CloneOrPull(SourceMapping mapping)
+    protected async Task<string> CloneOrPull(SourceMapping mapping, CancellationToken cancellationToken = default)
     {
         var clonePath = GetClonePath(mapping);
         if (Directory.Exists(clonePath))
@@ -73,8 +70,10 @@ public abstract class VmrManagerBase : IVmrManager
             return Path.Combine(clonePath, ".git");
         }
 
-        var remoteRepo = await _remoteFactory.GetRemoteAsync(mapping.DefaultRemote, _logger);
-        remoteRepo.Clone(mapping.DefaultRemote, mapping.DefaultRef, clonePath, checkoutSubmodules: false, null);
+        await _processManager.Execute(
+            _processManager.GitExecutable,
+            new[] { "clone", "--bare", mapping.DefaultRemote, clonePath },
+            cancellationToken: cancellationToken);
 
         return clonePath;
     }

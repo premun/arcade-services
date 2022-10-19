@@ -63,7 +63,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
         IVmrPatchHandler patchHandler,
         ILogger<VmrUpdater> logger,
         IVmrInfo vmrInfo)
-        : base(vmrInfo, dependencyTracker, processManager, remoteFactory, localGitRepo, versionDetailsParser, logger)
+        : base(vmrInfo, dependencyTracker, processManager, localGitRepo, versionDetailsParser, logger)
     {
         _logger = logger;
         _vmrInfo = vmrInfo;
@@ -102,7 +102,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
         _logger.LogInformation("Synchronizing {name} from {current} to {repo}@{revision}{oneByOne}",
             mapping.Name, currentSha, mapping.DefaultRemote, targetRevision ?? HEAD, noSquash ? " one commit at a time" : string.Empty);
 
-        var clonePath = await CloneOrPull(mapping);
+        var clonePath = await CloneOrPull(mapping, cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
 

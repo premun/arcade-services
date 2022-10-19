@@ -43,13 +43,12 @@ public class VmrInitializer : VmrManagerBase, IVmrInitializer
         IVmrDependencyTracker dependencyTracker,
         IVmrPatchHandler patchHandler,
         IProcessManager processManager,
-        IRemoteFactory remoteFactory,
         ILocalGitRepo localGitRepo,
         IVersionDetailsParser versionDetailsParser,
         IFileSystem fileSystem,
         ILogger<VmrUpdater> logger,
         IVmrInfo vmrInfo)
-        : base(vmrInfo, dependencyTracker, processManager, remoteFactory, localGitRepo, versionDetailsParser, logger)
+        : base(vmrInfo, dependencyTracker, processManager, localGitRepo, versionDetailsParser, logger)
     {
         _vmrInfo = vmrInfo;
         _dependencyTracker = dependencyTracker;
@@ -122,7 +121,7 @@ public class VmrInitializer : VmrManagerBase, IVmrInitializer
     {
         _logger.LogInformation("Initializing {name} at {revision}..", mapping.Name, targetRevision ?? mapping.DefaultRef);
 
-        string clonePath = await CloneOrPull(mapping);
+        string clonePath = await CloneOrPull(mapping, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
         using var clone = new Repository(clonePath);
