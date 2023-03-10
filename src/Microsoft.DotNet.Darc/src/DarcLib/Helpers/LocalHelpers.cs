@@ -129,27 +129,29 @@ public static class LocalHelpers
         string user,
         string email,
         string pat,
+        string[] filesToCheckout,
         string repoFolderName = "clonedRepo")
     {
-        Directory.CreateDirectory(workingDirectory);
+        var workingDir = new NativePath(workingDirectory);
+        Directory.CreateDirectory(workingDir);
 
-        ExecuteGitCommand(gitLocation, $"init {repoFolderName}", logger, workingDirectory);
+        ExecuteGitCommand(gitLocation, $"init {repoFolderName}", logger, workingDir);
 
-        workingDirectory = Path.Combine(workingDirectory, repoFolderName);
+        workingDir = workingDir / repoFolderName;
         repoUri = repoUri.Replace("https://", $"https://{user}:{pat}@");
 
-        ExecuteGitCommand(gitLocation, $"remote add {remote} {repoUri}", logger, workingDirectory, secretToMask: pat);
-        ExecuteGitCommand(gitLocation, "config core.sparsecheckout true", logger, workingDirectory);
-        ExecuteGitCommand(gitLocation, "config core.longpaths true", logger, workingDirectory);
-        ExecuteGitCommand(gitLocation, $"config user.name {user}", logger, workingDirectory);
-        ExecuteGitCommand(gitLocation, $"config user.email {email}", logger, workingDirectory);
+        ExecuteGitCommand(gitLocation, $"remote add {remote} {repoUri}", logger, workingDir, secretToMask: pat);
+        ExecuteGitCommand(gitLocation, "config core.sparsecheckout true", logger, workingDir);
+        ExecuteGitCommand(gitLocation, "config core.longpaths true", logger, workingDir);
+        ExecuteGitCommand(gitLocation, $"config user.name {user}", logger, workingDir);
+        ExecuteGitCommand(gitLocation, $"config user.email {email}", logger, workingDir);
 
-        File.WriteAllLines(Path.Combine(workingDirectory, ".git/info/sparse-checkout"), new[] { "eng/", ".config/", $"/{VersionFiles.NugetConfig}", $"/{VersionFiles.GlobalJson}" });
+        File.WriteAllLines(workingDir / ".git" / "info" / "sparse-checkout", filesToCheckout);
 
-        ExecuteGitCommand(gitLocation, $"-c core.askpass= -c credential.helper= pull --depth=1 {remote} {branch}", logger, workingDirectory, secretToMask: pat);
-        ExecuteGitCommand(gitLocation, $"checkout {branch}", logger, workingDirectory);
+        ExecuteGitCommand(gitLocation, $"-c core.askpass= -c credential.helper= pull --depth=1 {remote} {branch}", logger, workingDir, secretToMask: pat);
+        ExecuteGitCommand(gitLocation, $"checkout {branch}", logger, workingDir);
 
-        return workingDirectory;
+        return workingDir;
     }
 
     /// <summary>

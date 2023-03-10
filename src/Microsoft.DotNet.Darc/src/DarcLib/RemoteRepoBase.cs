@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -70,7 +71,18 @@ public class RemoteRepoBase : GitRepoCloner
             string clonedRepo = null;
 
             logger.LogInformation("Sparse and shallow checkout of branch {branch} in {repoUri}...", branch, repoUri);
-            clonedRepo = LocalHelpers.SparseAndShallowCheckout(GitExecutable, repoUri, branch, tempRepoFolder, logger, remote, dotnetMaestroName, dotnetMaestroEmail, pat);
+
+            clonedRepo = LocalHelpers.SparseAndShallowCheckout(
+                GitExecutable,
+                repoUri,
+                branch,
+                tempRepoFolder,
+                logger,
+                remote,
+                dotnetMaestroName,
+                dotnetMaestroEmail,
+                pat,
+                filesToCommit.Select(x => x.FilePath).ToArray());
 
             foreach (GitFile file in filesToCommit)
             {
