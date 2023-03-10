@@ -198,7 +198,8 @@ internal static class Program
         typeof(CloakedFileScanOptions),
         typeof(BinaryFileScanOptions),
         typeof(GetRepoVersionCommandLineOptions),
-        typeof(VmrPushCommandLineOptions)
+        typeof(VmrPushCommandLineOptions),
+        typeof(VmrBackflowCommandLineOptions),
     };
 
     private static void InitializeTelemetry()
