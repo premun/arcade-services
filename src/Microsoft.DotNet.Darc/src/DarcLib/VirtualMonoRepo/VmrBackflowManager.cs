@@ -104,7 +104,7 @@ public class VmrBackflowManager : IVmrBackflowManager
                 return nonSrcKey;
             }
 
-            return path.Substring(4, path.IndexOf('/', 4));
+            return path[4..path.IndexOf('/', 4)];
         });
 
         var nonSrcFiles = filesByRepo.FirstOrDefault(group => group.Key == nonSrcKey);
@@ -114,18 +114,42 @@ public class VmrBackflowManager : IVmrBackflowManager
             {
                 _logger.LogWarning("File {file} is outside of src/ and will be ignored", nonSrcFile);
             }
+
+            // Flush
+            Thread.Sleep(100);
         }
 
-        
+        var byRepoChanges = filesByRepo.Where(group => group.Key != nonSrcKey);
+
+        _logger.LogInformation("There are {changeCount} changes in {repoCount} repos",
+            byRepoChanges.Sum(group => group.Count()),
+            byRepoChanges.Count());
+
+        string baseUri = $"https://github.com/{user.Login}/";
+        string? prTitle = null;
+
+        foreach (var group in byRepoChanges)
+        {
+            Console.WriteLine($"Processing changes for {group.Key}:");
+
+            string forkName = PromptUser("  Create PR branch in", $"{baseUri}{group.Key}");
+            string prBranch = PromptUser("  PR branch name", $"{sourceBranch}");
+            prTitle = PromptUser($"  PR title", prTitle);
+            Console.WriteLine();
+        }
     }
 
     private static string PromptUser(string prompt, string? defaultValue = null, bool readCharOnly = false)
     {
         Console.Write($"{prompt} ");
-        var originalColor = Console.ForegroundColor;
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.Write($"[{defaultValue}]");
-        Console.ForegroundColor = originalColor;
+
+        if (defaultValue != null)
+        {
+            var originalColor = Console.ForegroundColor;
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.Write($"[{defaultValue}]");
+            Console.ForegroundColor = originalColor;
+        }
         Console.Write(": ");
         string? input = readCharOnly ? Console.ReadKey().KeyChar.ToString() : Console.ReadLine();
 
