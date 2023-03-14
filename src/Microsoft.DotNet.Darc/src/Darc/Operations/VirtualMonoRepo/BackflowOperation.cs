@@ -5,6 +5,7 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Options.VirtualMonoRepo;
+using Microsoft.DotNet.DarcLib.VirtualMonoRepo;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -28,7 +29,7 @@ internal class BackflowOperation : Operation
 
         try
         {
-            await backflowManager.(listener.Token);
+            await backflowManager.Backflow(listener.Token);
             return 0;
         }
         catch (Exception e)

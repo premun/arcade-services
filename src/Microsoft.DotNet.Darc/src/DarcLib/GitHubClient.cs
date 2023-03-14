@@ -24,7 +24,14 @@ using Maestro.MergePolicyEvaluation;
 
 namespace Microsoft.DotNet.DarcLib;
 
-public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
+public interface IGitHubClient : IRemoteGitRepo
+{
+    Octokit.IGitHubClient Client { get; }
+
+    Task<string> CheckIfFileExistsAsync(string repoUri, string filePath, string branch);
+}
+
+public class GitHubClient : RemoteRepoBase, IGitHubClient
 {
     private const string GitHubApiUri = "https://api.github.com";
     private const string DarcLibVersion = "1.0.0";
@@ -62,10 +69,10 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             ContractResolver = new CamelCasePropertyNamesContractResolver(),
             NullValueHandling = NullValueHandling.Ignore
         };
-        _lazyClient = new Lazy<IGitHubClient>(CreateGitHubClient);
+        _lazyClient = new Lazy<Octokit.IGitHubClient>(CreateGitHubClient);
     }
 
-    public virtual IGitHubClient Client => _lazyClient.Value;
+    public virtual Octokit.IGitHubClient Client => _lazyClient.Value;
 
     public bool AllowRetries { get; set; } = true;
 
