@@ -117,6 +117,7 @@ public static class LocalHelpers
     /// <param name="user">User name</param>
     /// <param name="email">User's email</param>
     /// <param name="pat">User's personal access token</param>
+    /// <param name="filesToCheckout">List of files that will be checked out</param>
     /// <param name="repoFolderName">The name of the folder where the repo is located</param>
     /// <returns>The full path of the cloned repo</returns>
     public static string SparseAndShallowCheckout(

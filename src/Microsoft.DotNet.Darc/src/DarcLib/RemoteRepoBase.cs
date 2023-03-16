@@ -18,7 +18,7 @@ namespace Microsoft.DotNet.DarcLib;
 public class RemoteRepoBase : GitRepoCloner
 {
     protected RemoteRepoBase(string gitExecutable, string temporaryRepositoryPath, IMemoryCache cache, ILogger logger, string accessToken)
-        : base(accessToken, logger)
+        : base(accessToken, gitExecutable, logger)
     {
         TemporaryRepositoryPath = temporaryRepositoryPath;
         GitExecutable = gitExecutable;

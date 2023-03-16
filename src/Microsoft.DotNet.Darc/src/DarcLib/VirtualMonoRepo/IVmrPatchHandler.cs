@@ -13,7 +13,7 @@ namespace Microsoft.DotNet.DarcLib.VirtualMonoRepo;
 
 public interface IVmrPatchHandler
 {
-    Task ApplyPatch(VmrIngestionPatch patch, CancellationToken cancellationToken);
+    Task ApplyPatch(VmrIngestionPatch patch, LocalPath repoPath, CancellationToken cancellationToken = default);
 
     Task<List<VmrIngestionPatch>> CreatePatches(
         SourceMapping mapping,

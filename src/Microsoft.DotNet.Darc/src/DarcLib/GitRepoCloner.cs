@@ -16,11 +16,13 @@ public class GitRepoCloner : IGitRepoCloner
 {
     private readonly ILogger _logger;
     private readonly string? _personalAccessToken;
+    private readonly string _gitExecutable;
 
-    public GitRepoCloner(string? personalAccessToken, ILogger logger)
+    public GitRepoCloner(string? personalAccessToken, string gitExecutable, ILogger logger)
     {
         _logger = logger;
         _personalAccessToken = personalAccessToken;
+        _gitExecutable = gitExecutable;
     }
 
     /// <summary>
@@ -48,9 +50,32 @@ public class GitRepoCloner : IGitRepoCloner
     public void Clone(string repoUri, string targetDirectory, string? gitDirectory)
         => Clone(repoUri, null, targetDirectory, CheckoutType.NoCheckout, gitDirectory);
 
+    /// <summary>
+    ///     Sparse-clone a portion of a remote git repo.
+    /// </summary>
+    /// <param name="repoUri">Repository uri to clone</param>
+    /// <param name="commit">Branch, commit, or tag to checkout</param>
+    /// <param name="targetDirectory">Target directory to clone to</param>
+    /// <param name="filesToCheckout">List of files that will be checked out</param>
+    public void SparseClone(string repoUri, string? commit, string targetDirectory, string[] filesToCheckout)
+    {
+        LocalHelpers.SparseAndShallowCheckout(
+            _gitExecutable,
+            repoUri,
+            commit ?? "main",
+            Path.GetDirectoryName(targetDirectory),
+            _logger,
+            "origin",
+            Constants.DarcBotName,
+            Constants.DarcBotEmail,
+            _personalAccessToken,
+            filesToCheckout,
+            Path.GetFileName(targetDirectory));
+    }
+
     private void Clone(string repoUri, string? commit, string targetDirectory, CheckoutType checkoutType, string? gitDirectory)
     {
-        string dotnetMaestro = "dotnet-maestro"; // lgtm [cs/hardcoded-credentials] Value is correct for this service
+        string dotnetMaestro = Constants.DarcBotName;
         CloneOptions cloneOptions = new()
         {
             Checkout = false,

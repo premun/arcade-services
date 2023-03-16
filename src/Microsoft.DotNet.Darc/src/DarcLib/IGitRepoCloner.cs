@@ -15,7 +15,7 @@ public interface IGitRepoCloner
     /// <param name="targetDirectory">Target directory to clone to</param>
     /// <param name="checkoutSubmodules">Indicates whether submodules should be checked out as well</param>
     /// <param name="gitDirectory">Location for the .git directory, or null for default</param>
-    public void Clone(
+    void Clone(
         string repoUri,
         string? commit,
         string targetDirectory,
@@ -28,5 +28,14 @@ public interface IGitRepoCloner
     /// <param name="repoUri">Repository uri to clone</param>
     /// <param name="targetDirectory">Target directory to clone to</param>
     /// <param name="gitDirectory">Location for the .git directory, or null for default</param>
-    public void Clone(string repoUri, string targetDirectory, string? gitDirectory);
+    void Clone(string repoUri, string targetDirectory, string? gitDirectory);
+
+    /// <summary>
+    ///     Sparse-clone a portion of a remote git repo.
+    /// </summary>
+    /// <param name="repoUri">Repository uri to clone</param>
+    /// <param name="commit">Branch, commit, or tag to checkout</param>
+    /// <param name="targetDirectory">Target directory to clone to</param>
+    /// <param name="filesToCheckout">List of files that will be checked out</param>
+    void SparseClone(string repoUri, string? commit, string targetDirectory, string[] filesToCheckout);
 }
