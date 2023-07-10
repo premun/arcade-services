@@ -125,6 +125,7 @@ public class SourceManifest : ISourceManifest
             AllowTrailingCommas = true,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             PropertyNameCaseInsensitive = true,
+            ReadCommentHandling = JsonCommentHandling.Skip,
         };
 
         using var stream = File.Open(path, FileMode.Open, FileAccess.Read);
