@@ -61,15 +61,6 @@ public interface IVmrInfo
     LocalPath GetSourceManifestPath();
 
     /// <summary>
-    /// Retrieves a file's content from VMR's git index.
-    /// </summary>
-    /// <param name="path">Absolute or relative path</param>
-    /// <param name="revision">Revision to get the file from</param>
-    /// <param name="outputPath">Optional path to write the contents to</param>
-    /// <returns>File contents</returns>
-    Task<string> GetFileContent(LocalPath path, string revision = VmrManagerBase.HEAD, LocalPath? outputPath = null);
-
-    /// <summary>
     /// Work with repositories in bare mode (no working directory)
     /// </summary>
     public bool BareMode { get; }

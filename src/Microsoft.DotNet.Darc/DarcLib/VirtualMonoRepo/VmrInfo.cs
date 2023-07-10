@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Models.VirtualMonoRepo;
 using Microsoft.DotNet.DarcLib.Helpers;
 
@@ -25,6 +24,7 @@ public class VmrInfo : IVmrInfo
     public const string ThirdPartyNoticesFileName = "THIRD-PARTY-NOTICES.txt";
 
     private readonly IProcessManager _processManager;
+    private readonly IFileSystem _fileSystem;
 
     public static UnixPath RelativeSourcesDir { get; } = new("src");
 
@@ -38,15 +38,16 @@ public class VmrInfo : IVmrInfo
 
     public IReadOnlyCollection<(string Source, string? Destination)> AdditionalMappings { get; set; } = Array.Empty<(string, string?)>();
 
-    public VmrInfo(IProcessManager processManager, LocalPath vmrPath, LocalPath tmpPath)
+    public VmrInfo(IProcessManager processManager, IFileSystem fileSystem, LocalPath vmrPath, LocalPath tmpPath)
     {
         VmrPath = vmrPath;
         TmpPath = tmpPath;
         _processManager = processManager;
+        _fileSystem = fileSystem;
     }
 
-    public VmrInfo(IProcessManager processManager, string vmrPath, string tmpPath)
-        : this(processManager, new NativePath(vmrPath), new NativePath(tmpPath))
+    public VmrInfo(IProcessManager processManager, IFileSystem fileSystem, string vmrPath, string tmpPath)
+        : this(processManager, fileSystem, new NativePath(vmrPath), new NativePath(tmpPath))
     {
     }
 
@@ -70,30 +71,6 @@ public class VmrInfo : IVmrInfo
     public static UnixPath GetRelativeRepoSourcesPath(SourceMapping mapping) => RelativeSourcesDir / mapping.Name;
 
     public LocalPath GetSourceManifestPath() => VmrPath / SourcesDir / SourceManifestFileName;
-
-    public async Task<string> GetFileContent(LocalPath path, string revision = VmrManagerBase.HEAD, LocalPath? outputPath = null)
-    {
-        var gitPath = GetGitPath(path);
-
-        var args = new List<string>
-        {
-            "show",
-            $"{revision}:{gitPath}"
-        };
-
-        if (outputPath != null)
-        {
-            args.Add(">");
-            args.Add(outputPath);
-        }
-
-        var result = await _processManager.ExecuteGit(VmrPath, args);
-        result.ThrowIfFailed($"Failed to read {gitPath} from a bare VMR at {revision}");
-
-        return outputPath != null
-            ? gitPath
-            : result.StandardOutput;
-    }
 
     public bool BareMode => true; // TODO
 }

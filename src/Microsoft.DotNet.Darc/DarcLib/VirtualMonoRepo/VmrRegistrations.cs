@@ -50,6 +50,8 @@ public static class VmrRegistrations
 
     private static void RegisterCommonServices(IServiceCollection services, string gitLocation)
     {
+        services.TryAddSingleton<IVmrDependencyTracker, VmrDependencyTracker>();
+
         services.TryAddTransient<IProcessManager>(sp => ActivatorUtilities.CreateInstance<ProcessManager>(sp, gitLocation));
         services.TryAddTransient<ILocalGitRepo>(sp => ActivatorUtilities.CreateInstance<LocalGitClient>(sp, gitLocation));
         services.TryAddTransient<ILogger>(sp => sp.GetRequiredService<ILogger<VmrManagerBase>>());
@@ -59,7 +61,7 @@ public static class VmrRegistrations
         services.TryAddTransient<IVmrUpdater, VmrUpdater>();
         services.TryAddTransient<IVmrInitializer, VmrInitializer>();
         services.TryAddTransient<IVmrRepoVersionResolver, VmrRepoVersionResolver>();
-        services.TryAddSingleton<IVmrDependencyTracker, VmrDependencyTracker>();
+        services.TryAddTransient<IVmrFileManager, VmrFileManager>();
         services.TryAddTransient<IThirdPartyNoticesGenerator, ThirdPartyNoticesGenerator>();
         services.TryAddTransient<IReadmeComponentListGenerator, ReadmeComponentListGenerator>();
         services.TryAddTransient<IRepositoryCloneManager, RepositoryCloneManager>();
@@ -93,8 +95,9 @@ public static class VmrRegistrations
         services.TryAddSingleton<ISourceManifest>(sp =>
         {
             var vmrInfo = sp.GetRequiredService<IVmrInfo>();
+            var vmrFileManager = sp.GetRequiredService<IVmrFileManager>();
             // TODO: Possibly get the path in a better way and await this appropriately
-            return SourceManifest.FromJson(vmrInfo.GetFileContent(vmrInfo.GetSourceManifestPath()).Result);
+            return SourceManifest.FromJson(vmrFileManager.GetFileContent(vmrInfo.GetSourceManifestPath()).Result);
         });
     }
 }
