@@ -43,10 +43,7 @@ public class SourceMappingParser : ISourceMappingParser
         // Load the source mappings from VMR's git index directly when in bare mode
         if (mappingFilePath.StartsWith(_vmrInfo.VmrPath) && _vmrInfo.BareMode)
         {
-            var result = await _processManager.ExecuteGit(_vmrInfo.VmrPath, "show", $"HEAD:{VmrInfo.SourcesDir}/{VmrInfo.SourceMappingsFileName}");
-            result.ThrowIfFailed($"Failed to read {VmrInfo.SourceMappingsFileName} from a bare VMR");
-
-            sourceMappingJson = result.StandardOutput;
+            sourceMappingJson = await _vmrInfo.GetFileContent(new UnixPath(mappingFilePath));
         }
         else
         {

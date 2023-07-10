@@ -27,7 +27,7 @@ public static class VmrRegistrations
         string? azureDevOpsToken)
     {
         RegisterCommonServices(services, gitLocation);
-        services.TryAddSingleton<IVmrInfo>(new VmrInfo(Path.GetFullPath(vmrPath), Path.GetFullPath(tmpPath)));
+        services.TryAddSingleton<IVmrInfo>(sp => ActivatorUtilities.CreateInstance<VmrInfo>(sp, Path.GetFullPath(vmrPath), Path.GetFullPath(tmpPath)));
         services.TryAddSingleton(new VmrRemoteConfiguration(gitHubToken, azureDevOpsToken));
         services.TryAddSingleton(gitManagerFactoryProvider);
         return services;
@@ -43,7 +43,7 @@ public static class VmrRegistrations
     {
         RegisterCommonServices(services, gitLocation);
         services.TryAddSingleton(configure);
-        services.TryAddSingleton<IVmrInfo>(new VmrInfo(vmrPath, tmpPath));
+        services.TryAddSingleton<IVmrInfo>(sp => ActivatorUtilities.CreateInstance<VmrInfo>(sp, vmrPath, tmpPath));
         services.TryAddSingleton(gitManagerFactoryProvider);
         return services;
     }
@@ -92,8 +92,8 @@ public static class VmrRegistrations
         // These initialize the configuration by reading the JSON files in VMR's src/
         services.TryAddSingleton<ISourceManifest>(sp =>
         {
-            var configuration = sp.GetRequiredService<IVmrInfo>();
-            return SourceManifest.FromJson(configuration.GetSourceManifestPath());
+            var vmrInfo = sp.GetRequiredService<IVmrInfo>();
+            return SourceManifest.FromJson(vmrInfo.GetSourceManifestPath());
         });
     }
 }

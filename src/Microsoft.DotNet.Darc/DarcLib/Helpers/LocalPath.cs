@@ -74,6 +74,10 @@ public class NativePath : LocalPath
     {
     }
 
+    public NativePath(LocalPath path) : this(path.Path, (path is UnixPath && System.IO.Path.DirectorySeparatorChar != '/') || (path is WindowsPath && System.IO.Path.DirectorySeparatorChar != '\\'))
+    {
+    }
+
     private NativePath(string path, bool normalize) : base(path, System.IO.Path.DirectorySeparatorChar, normalize)
     {
     }
@@ -99,6 +103,10 @@ public class UnixPath : LocalPath
     {
     }
 
+    public UnixPath(LocalPath path) : this(path.Path, path is not UnixPath)
+    {
+    }
+
     private UnixPath(string path, bool normalize) : base(path, '/', normalize)
     {
     }
@@ -117,6 +125,10 @@ public class UnixPath : LocalPath
 public class WindowsPath : LocalPath
 {
     public WindowsPath(string path) : this(path, true)
+    {
+    }
+
+    public WindowsPath(LocalPath path) : this(path.Path, path is not WindowsPath)
     {
     }
 
