@@ -122,8 +122,8 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
             return;
         }
 
-        if (_vmrInfo.SourceMappingsPath != null
-            && _vmrInfo.SourceMappingsPath.StartsWith(VmrInfo.GetRelativeRepoSourcesPath(mapping)))
+        // In case the repo (installer) is where source mappings are hosted, reload mappings from there
+        if (_vmrInfo.SourceMappingsPath?.StartsWith(VmrInfo.GetRelativeRepoSourcesPath(mapping)) ?? false)
         {
             var fileRelativePath = _vmrInfo.SourceMappingsPath.Substring(VmrInfo.GetRelativeRepoSourcesPath(mapping).Length);
 

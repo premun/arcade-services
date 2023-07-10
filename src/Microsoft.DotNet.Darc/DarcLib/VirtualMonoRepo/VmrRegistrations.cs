@@ -93,7 +93,8 @@ public static class VmrRegistrations
         services.TryAddSingleton<ISourceManifest>(sp =>
         {
             var vmrInfo = sp.GetRequiredService<IVmrInfo>();
-            return SourceManifest.FromJson(vmrInfo.GetSourceManifestPath());
+            // TODO: Possibly get the path in a better way and await this appropriately
+            return SourceManifest.FromJson(vmrInfo.GetFileContent(vmrInfo.GetSourceManifestPath()).Result);
         });
     }
 }

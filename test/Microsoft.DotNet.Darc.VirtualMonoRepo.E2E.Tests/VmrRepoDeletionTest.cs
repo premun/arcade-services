@@ -90,7 +90,7 @@ public class VmrRepoDeletionTest : VmrTestsBase
         var versions = AllVersionsPropsFile.DeserializeFromXml(VmrPath / VmrInfo.GitInfoSourcesDir / AllVersionsPropsFile.FileName);
         versions.Versions.Keys.Should().BeEquivalentTo(new string[] { "installerGitCommitHash" });
 
-        var sourceManifest = SourceManifest.FromJson(Info.GetSourceManifestPath());
+        var sourceManifest = SourceManifest.FromJson(File.ReadAllText(Info.GetSourceManifestPath())); // TODO: Fix for bare
         sourceManifest.Repositories.Should().HaveCount(1);
         sourceManifest.Repositories.First().Path.Should().Be("installer");
 

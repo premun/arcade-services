@@ -113,13 +113,8 @@ public class SourceManifest : ISourceManifest
         return JsonSerializer.Serialize(data, options);
     }
 
-    public static SourceManifest FromJson(string path)
+    public static SourceManifest FromJson(string json)
     {
-        if (!File.Exists(path))
-        {
-            return new SourceManifest(Array.Empty<RepositoryRecord>(), Array.Empty<SubmoduleRecord>());
-        }
-
         var options = new JsonSerializerOptions
         {
             AllowTrailingCommas = true,
@@ -128,9 +123,8 @@ public class SourceManifest : ISourceManifest
             ReadCommentHandling = JsonCommentHandling.Skip,
         };
 
-        using var stream = File.Open(path, FileMode.Open, FileAccess.Read);
-        var wrapper = JsonSerializer.Deserialize<SourceManifestWrapper>(stream, options)
-            ?? throw new Exception($"Failed to deserialize {path}");
+        var wrapper = JsonSerializer.Deserialize<SourceManifestWrapper>(json, options)
+            ?? throw new Exception($"Failed to deserialize source manifest");
 
         return new SourceManifest(wrapper.Repositories, wrapper.Submodules);
     }
