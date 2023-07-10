@@ -28,21 +28,38 @@ public interface ISourceMappingParser
 public class SourceMappingParser : ISourceMappingParser
 {
     private readonly IVmrInfo _vmrInfo;
+    private readonly IProcessManager _processManager;
 
-    public SourceMappingParser(IVmrInfo vmrInfo)
+    public SourceMappingParser(IVmrInfo vmrInfo, IProcessManager processManager)
     {
         _vmrInfo = vmrInfo;
+        _processManager = processManager;
     }
 
     public async Task<IReadOnlyCollection<SourceMapping>> ParseMappings(string mappingFilePath)
     {
-        var mappingFile = new FileInfo(mappingFilePath);
+        string sourceMappingJson;
 
-        if (!mappingFile.Exists)
+        // Load the source mappings from VMR's git index directly when in bare mode
+        if (mappingFilePath.StartsWith(_vmrInfo.VmrPath) && _vmrInfo.BareMode)
         {
-            throw new FileNotFoundException(
-                $"Failed to find {VmrInfo.SourceMappingsFileName} file.",
-                mappingFilePath);
+            var result = await _processManager.ExecuteGit(_vmrInfo.VmrPath, "show", $"HEAD:{VmrInfo.SourcesDir}/{VmrInfo.SourceMappingsFileName}");
+            result.ThrowIfFailed($"Failed to read {VmrInfo.SourceMappingsFileName} from a bare VMR");
+
+            sourceMappingJson = result.StandardOutput;
+        }
+        else
+        {
+            var mappingFile = new FileInfo(mappingFilePath);
+
+            if (!mappingFile.Exists)
+            {
+                throw new FileNotFoundException(
+                    $"Failed to find {VmrInfo.SourceMappingsFileName} file.",
+                    mappingFilePath);
+            }
+
+            sourceMappingJson = await File.ReadAllTextAsync(mappingFile.FullName);
         }
 
         var options = new JsonSerializerOptions
@@ -52,8 +69,7 @@ public class SourceMappingParser : ISourceMappingParser
             ReadCommentHandling = JsonCommentHandling.Skip,
         };
 
-        using var stream = File.Open(mappingFile.FullName, FileMode.Open);
-        var settings = await JsonSerializer.DeserializeAsync<SourceMappingFile>(stream, options)
+        var settings = JsonSerializer.Deserialize<SourceMappingFile>(sourceMappingJson, options)
             ?? throw new Exception($"Failed to deserialize {VmrInfo.SourceMappingsFileName}");
 
         _vmrInfo.PatchesPath = NormalizePath(settings.PatchesPath);

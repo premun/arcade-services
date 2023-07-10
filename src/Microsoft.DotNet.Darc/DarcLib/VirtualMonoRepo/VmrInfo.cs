@@ -54,6 +54,11 @@ public interface IVmrInfo
     /// Gets a full path leading to the source manifest JSON file.
     /// </summary>
     LocalPath GetSourceManifestPath();
+
+    /// <summary>
+    /// Work with repositories in bare mode (no working directory)
+    /// </summary>
+    public bool BareMode { get; }
 }
 
 public class VmrInfo : IVmrInfo
@@ -99,4 +104,6 @@ public class VmrInfo : IVmrInfo
     public static UnixPath GetRelativeRepoSourcesPath(SourceMapping mapping) => RelativeSourcesDir / mapping.Name;
 
     public LocalPath GetSourceManifestPath() => VmrPath / SourcesDir / SourceManifestFileName;
+
+    public bool BareMode => true; // TODO
 }
