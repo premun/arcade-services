@@ -27,5 +27,6 @@ public interface IGitRepoCloner
     /// <param name="repoUri">Repository uri to clone</param>
     /// <param name="targetDirectory">Target directory to clone to</param>
     /// <param name="gitDirectory">Location for the .git directory, or null for default</param>
-    public void Clone(string repoUri, string targetDirectory, string? gitDirectory);
+    /// <param name="bareClone">Indicates whether the clone should be bare</param>
+    public void Clone(string repoUri, string targetDirectory, string? gitDirectory, bool bareClone);
 }

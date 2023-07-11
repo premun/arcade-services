@@ -44,8 +44,9 @@ public class GitRepoCloner : IGitRepoCloner
     /// <param name="repoUri">Repository uri to clone</param>
     /// <param name="targetDirectory">Target directory to clone to</param>
     /// <param name="gitDirectory">Location for the .git directory, or null for default</param>
-    public void Clone(string repoUri, string targetDirectory, string? gitDirectory)
-        => Clone(repoUri, null, targetDirectory, CheckoutType.NoCheckout, gitDirectory);
+    /// <param name="bareClone">Indicates whether the clone should be bare</param>
+    public void Clone(string repoUri, string targetDirectory, string? gitDirectory, bool bareClone)
+        => Clone(repoUri, null, targetDirectory, bareClone ? CheckoutType.BareClone : CheckoutType.NoCheckout, gitDirectory);
 
     private void Clone(string repoUri, string? commit, string targetDirectory, CheckoutType checkoutType, string? gitDirectory)
     {
@@ -53,6 +54,7 @@ public class GitRepoCloner : IGitRepoCloner
         CloneOptions cloneOptions = new()
         {
             Checkout = false,
+            IsBare = checkoutType == CheckoutType.BareClone,
             CredentialsProvider = (url, user, cred) =>
                 new UsernamePasswordCredentials
                 {
@@ -73,7 +75,7 @@ public class GitRepoCloner : IGitRepoCloner
                 targetDirectory,
                 cloneOptions);
 
-            if (checkoutType == CheckoutType.NoCheckout)
+            if (checkoutType == CheckoutType.NoCheckout || checkoutType == CheckoutType.BareClone)
             {
                 return;
             }
@@ -199,5 +201,6 @@ public class GitRepoCloner : IGitRepoCloner
         CheckoutWithoutSubmodules,
         CheckoutWithSubmodules,
         NoCheckout,
+        BareClone,
     }
 }

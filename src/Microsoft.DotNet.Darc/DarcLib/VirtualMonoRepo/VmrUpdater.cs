@@ -67,6 +67,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
     private readonly IVmrDependencyTracker _dependencyTracker;
     private readonly IRepositoryCloneManager _cloneManager;
     private readonly IVmrPatchHandler _patchHandler;
+    private readonly IProcessManager _processManager;
     private readonly IFileSystem _fileSystem;
     private readonly ILogger<VmrUpdater> _logger;
     private readonly ISourceManifest _sourceManifest;
@@ -82,6 +83,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
         IReadmeComponentListGenerator readmeComponentListGenerator,
         ILocalGitRepo localGitClient,
         IGitFileManagerFactory gitFileManagerFactory,
+        IProcessManager processManager,
         IFileSystem fileSystem,
         ILogger<VmrUpdater> logger,
         ISourceManifest sourceManifest,
@@ -94,6 +96,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
         _dependencyTracker = dependencyTracker;
         _cloneManager = cloneManager;
         _patchHandler = patchHandler;
+        _processManager = processManager;
         _fileSystem = fileSystem;
         _thirdPartyNoticesGenerator = thirdPartyNoticesGenerator;
         _readmeComponentListGenerator = readmeComponentListGenerator;
@@ -590,7 +593,17 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
                 {
                     // Copy old revision to VMR
                     _logger.LogDebug("Restoring file `{destination}` from original at `{originalFile}`..", destination, originalFile);
-                    _fileSystem.CopyFile(originalFile, destination, overwrite: true);
+
+                    var args = new List<string>
+                    {
+                        "show",
+                        $"{source.CommitSha}:{relativePath}",
+                        "--output",
+                        destination,
+                    };
+
+                    var result = await _processManager.ExecuteGit(clonePath, args);
+                    result.ThrowIfFailed($"Failed to get git file '{relativePath}' from repo '{clonePath}' at {source.CommitSha}");
 
                     Commands.Stage(repository, pathInVmr);
                 }
