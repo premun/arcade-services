@@ -64,6 +64,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
     private const string Arrow = " → ";
 
     private readonly IVmrInfo _vmrInfo;
+    private readonly IVmrFileManager _fileManager;
     private readonly IVmrDependencyTracker _dependencyTracker;
     private readonly IRepositoryCloneManager _cloneManager;
     private readonly IVmrPatchHandler _patchHandler;
@@ -74,6 +75,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
     private readonly IReadmeComponentListGenerator _readmeComponentListGenerator;
 
     public VmrUpdater(
+        IVmrFileManager fileManager,
         IVmrDependencyTracker dependencyTracker,
         IVersionDetailsParser versionDetailsParser,
         IRepositoryCloneManager cloneManager,
@@ -91,6 +93,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
         _logger = logger;
         _sourceManifest = sourceManifest;
         _vmrInfo = vmrInfo;
+        _fileManager = fileManager;
         _dependencyTracker = dependencyTracker;
         _cloneManager = cloneManager;
         _patchHandler = patchHandler;
@@ -110,6 +113,8 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
         string? tpnTemplatePath,
         CancellationToken cancellationToken)
     {
+        await _fileManager.WriteFile(new UnixPath("foo/vmr.lock"), "Updating");
+
         await _dependencyTracker.InitializeSourceMappings();
 
         var mapping = _dependencyTracker.Mappings

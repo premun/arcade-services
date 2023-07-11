@@ -1,8 +1,10 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using CliWrap;
 using Microsoft.DotNet.DarcLib.Helpers;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading.Tasks;
 
 #nullable enable
@@ -84,29 +86,33 @@ public class VmrFileManager : IVmrFileManager
         }
 
         var gitPath = path.Path;
+        var objectId = new StringBuilder();
 
         // Create object in .git
-        var result = await _processManager.ExecuteGit(
-            _vmrInfo.VmrPath,
-            "hash-object",
-            "-w",
-            "--path",
-            gitPath,
-            "<",
-            content);
-
-        result.ThrowIfFailed($"Failed to create git object for {gitPath}");
+        var result = await Cli.Wrap("git")
+            .WithArguments(new[]
+            {
+                "-C",
+                _vmrInfo.VmrPath,
+                "hash-object",
+                "-w",
+                "--path",
+                gitPath,
+                "--stdin"
+            })
+            .WithStandardInputPipe(PipeSource.FromString(content))
+            .WithStandardOutputPipe(PipeTarget.ToStringBuilder(objectId))
+            .ExecuteAsync();
 
         // Register object in git index
-        var objectId = result.StandardOutput.Trim();
-        result = await _processManager.ExecuteGit(
+        var result2 = await _processManager.ExecuteGit(
             _vmrInfo.VmrPath,
             "update-index",
             "--cacheinfo",
             "100644",
-            objectId,
+            objectId.ToString().Trim(),
             gitPath);
 
-        result.ThrowIfFailed($"Failed to register git object {objectId} in git index at {gitPath}");
+        result2.ThrowIfFailed($"Failed to register git object {objectId} in git index at {gitPath}");
     }
 }

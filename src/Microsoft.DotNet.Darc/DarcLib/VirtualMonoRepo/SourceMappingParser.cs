@@ -28,12 +28,12 @@ public interface ISourceMappingParser
 public class SourceMappingParser : ISourceMappingParser
 {
     private readonly IVmrInfo _vmrInfo;
-    private readonly IProcessManager _processManager;
+    private readonly IVmrFileManager _vmrFileManager;
 
-    public SourceMappingParser(IVmrInfo vmrInfo, IProcessManager processManager)
+    public SourceMappingParser(IVmrInfo vmrInfo, IVmrFileManager vmrFileManager)
     {
         _vmrInfo = vmrInfo;
-        _processManager = processManager;
+        _vmrFileManager = vmrFileManager;
     }
 
     public async Task<IReadOnlyCollection<SourceMapping>> ParseMappings(string mappingFilePath)
@@ -43,7 +43,7 @@ public class SourceMappingParser : ISourceMappingParser
         // Load the source mappings from VMR's git index directly when in bare mode
         if (mappingFilePath.StartsWith(_vmrInfo.VmrPath) && _vmrInfo.BareMode)
         {
-            sourceMappingJson = await _vmrInfo.GetFileContent(new UnixPath(mappingFilePath));
+            sourceMappingJson = await _vmrFileManager.GetFileContent(new NativePath(mappingFilePath));
         }
         else
         {
