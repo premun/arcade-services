@@ -73,7 +73,7 @@ public class VmrPusher : IVmrPusher
 
         var repoType = GitRepoTypeParser.ParseFromUri(remoteUrl);
 
-        string? pat = string.Empty;
+        string? pat = null;
         if (repoType == GitRepoType.GitHub)
         {
             pat = _vmrRemoteConfiguration.GitHubToken;
@@ -87,7 +87,7 @@ public class VmrPusher : IVmrPusher
             _vmrInfo.VmrPath,
             branch,
             remoteUrl,
-            pat,
+            pat ?? string.Empty,
             new LibGit2Sharp.Identity(Constants.DarcBotName, Constants.DarcBotEmail));
     }
 

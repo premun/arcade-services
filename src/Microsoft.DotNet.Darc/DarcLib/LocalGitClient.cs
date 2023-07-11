@@ -6,12 +6,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Security.Policy;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using LibGit2Sharp;
 using Microsoft.DotNet.DarcLib.Helpers;
-using Microsoft.DotNet.DarcLib.VirtualMonoRepo;
 using Microsoft.Extensions.Logging;
 
 #nullable enable
@@ -411,14 +410,55 @@ public class LocalGitClient : ILocalGitRepo
             return new();
         }
 
-        var repository = new Repository(repoDir);
+        var submoduleFile = GetFileFromGit(repoDir, ".gitmodules", commit);
 
-        // I haven't found a way to do this with LibGit2Sharp without checking out the commit
-        Commands.Checkout(repository, commit);
+        var submodules = new List<GitSubmoduleInfo>();
+        GitSubmoduleInfo? currentSubmodule = null;
 
-        return repository.Submodules
-            .Select(s => new GitSubmoduleInfo(s.Name, s.Path, s.Url, s.IndexCommitId.Sha))
-            .ToList();
+        var lines = submoduleFile
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => l.Trim());
+
+        var submoduleRegex = new Regex("^\\[submodule \"(?<name>.+)\"\\]$");
+        var submoduleUrlRegex = new Regex("^\\s*url\\s*=\\s*(?<url>.+)$");
+        var submodulePathRegex = new Regex("^\\s*path\\s*=\\s*(?<path>.+)$");
+
+        foreach (var line in lines)
+        {
+            var match = submoduleRegex.Match(line);
+            if (match.Success)
+            {
+                if (currentSubmodule != null)
+                {
+                    currentSubmodule = currentSubmodule with
+                    {
+                        // Read SHA that the submodule points to
+                        Commit = LocalHelpers.ExecuteCommand("git", $"rev-parse {commit}:{currentSubmodule.Path}", _logger, repoDir).Trim(),
+                    };
+
+                    submodules.Add(currentSubmodule);
+                }
+
+                currentSubmodule = new GitSubmoduleInfo(match.Groups["name"].Value, null!, null!, null!);
+                continue;
+            }
+
+            match = submoduleUrlRegex.Match(line);
+            if (match.Success)
+            {
+                currentSubmodule = currentSubmodule! with { Url = match.Groups["url"].Value };
+                continue;
+            }
+
+            match = submodulePathRegex.Match(line);
+            if (match.Success)
+            {
+                currentSubmodule = currentSubmodule! with { Path = match.Groups["path"].Value };
+                continue;
+            }
+        }
+
+        return submodules;
     }
 
     public IEnumerable<string> GetStagedFiles(string repoDir)
@@ -429,6 +469,18 @@ public class LocalGitClient : ILocalGitRepo
             .Concat(repositoryStatus.Removed)
             .Concat(repositoryStatus.Staged)
             .Select(file => file.FilePath);
+    }
+
+    public string GetFileFromGit(string repoPath, string relativeFilePath, string revision = "HEAD", string? outputPath = null)
+    {
+        var args = $"show {revision}:{relativeFilePath}";
+
+        if (outputPath != null)
+        {
+            args += $" --output {outputPath}";
+        }
+
+        return LocalHelpers.ExecuteCommand(_gitExecutable, args, _logger, repoPath);
     }
 
     public void Push(

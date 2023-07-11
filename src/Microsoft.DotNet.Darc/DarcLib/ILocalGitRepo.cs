@@ -2,8 +2,8 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
-using System.Threading.Tasks;
 
+#nullable enable
 namespace Microsoft.DotNet.DarcLib;
 
 public interface ILocalGitRepo : IGitRepo
@@ -47,6 +47,16 @@ public interface ILocalGitRepo : IGitRepo
     IEnumerable<string> GetStagedFiles(string repoDir);
 
     /// <summary>
+    /// Retrieves a file's content from git index (works with bare repositories).
+    /// </summary>
+    /// <param name="repoPath">Absolute or relative path to the repo</param>
+    /// <param name="relativeFilePath">Relative path to the file inside of the repo</param>
+    /// <param name="revision">Revision to get the file from</param>
+    /// <param name="outputPath">Optional path to write the contents to</param>
+    /// <returns>File contents</returns>
+    string GetFileFromGit(string repoPath, string relativeFilePath, string revision = "HEAD", string? outputPath = null);
+
+    /// <summary>
     /// Pushes a branch to a remote
     /// </summary>
     /// <param name="repoPath">Path of the local repository</param>
@@ -59,5 +69,5 @@ public interface ILocalGitRepo : IGitRepo
         string branchName,
         string remoteUrl,
         string token,
-        LibGit2Sharp.Identity identity = null);
+        LibGit2Sharp.Identity? identity = null);
 }

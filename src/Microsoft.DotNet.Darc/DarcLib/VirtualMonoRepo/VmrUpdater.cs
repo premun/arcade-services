@@ -73,6 +73,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
     private readonly ISourceManifest _sourceManifest;
     private readonly IThirdPartyNoticesGenerator _thirdPartyNoticesGenerator;
     private readonly IReadmeComponentListGenerator _readmeComponentListGenerator;
+    private readonly ILocalGitRepo _localGitClient;
 
     public VmrUpdater(
         IVmrDependencyTracker dependencyTracker,
@@ -100,6 +101,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
         _fileSystem = fileSystem;
         _thirdPartyNoticesGenerator = thirdPartyNoticesGenerator;
         _readmeComponentListGenerator = readmeComponentListGenerator;
+        _localGitClient = localGitClient;
     }
 
     public async Task UpdateRepository(
@@ -136,11 +138,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
                 .Prepend(mapping.DefaultRemote)
                 .ToArray();
 
-            var clonePath = await _cloneManager.PrepareClone(
-                mapping,
-                remotes,
-                targetRevision ?? mapping.DefaultRef, 
-                cancellationToken);
+            var clonePath = await _cloneManager.PrepareBareClone(mapping, remotes, cancellationToken);
 
             _logger.LogDebug($"Loading a new version of source mappings from {clonePath / fileRelativePath}");
             await _dependencyTracker.InitializeSourceMappings(clonePath / fileRelativePath);
@@ -202,11 +200,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
             .Prepend(update.RemoteUri)
             .ToArray();
 
-        LocalPath clonePath = await _cloneManager.PrepareClone(
-            update.Mapping,
-            remotes,
-            update.TargetRevision,
-            cancellationToken);
+        LocalPath clonePath = await _cloneManager.PrepareBareClone(update.Mapping, remotes, cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -580,7 +574,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
                 source.RemoteUri,
                 source.CommitSha);
 
-            var clonePath = await _cloneManager.PrepareClone(source.RemoteUri, source.CommitSha, cancellationToken);
+            var clonePath = await _cloneManager.PrepareBareClone(source.RemoteUri, cancellationToken);
 
             foreach ((UnixPath relativePath, UnixPath pathInVmr) in group)
             {
@@ -593,18 +587,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
                 {
                     // Copy old revision to VMR
                     _logger.LogDebug("Restoring file `{destination}` from original at `{originalFile}`..", destination, originalFile);
-
-                    var args = new List<string>
-                    {
-                        "show",
-                        $"{source.CommitSha}:{relativePath}",
-                        "--output",
-                        destination,
-                    };
-
-                    var result = await _processManager.ExecuteGit(clonePath, args);
-                    result.ThrowIfFailed($"Failed to get git file '{relativePath}' from repo '{clonePath}' at {source.CommitSha}");
-
+                    _localGitClient.GetFileFromGit(clonePath, relativePath, source.CommitSha, destination);
                     Commands.Stage(repository, pathInVmr);
                 }
                 else if (_fileSystem.FileExists(destination))

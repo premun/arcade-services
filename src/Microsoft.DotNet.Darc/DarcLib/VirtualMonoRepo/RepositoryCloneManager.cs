@@ -23,6 +23,10 @@ public interface IRepositoryCloneManager
         string[] remotes,
         string checkoutRef,
         CancellationToken cancellationToken);
+
+    Task<LocalPath> PrepareBareClone(string repoUri, CancellationToken cancellationToken);
+
+    Task<LocalPath> PrepareBareClone(SourceMapping mapping, string[] remotes, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -67,6 +71,31 @@ public class RepositoryCloneManager : IRepositoryCloneManager
         string[] remoteUris,
         string checkoutRef,
         CancellationToken cancellationToken)
+        => await PrepareCloneInternal(mapping, remoteUris, checkoutRef, false, cancellationToken);
+
+    public async Task<LocalPath> PrepareClone(
+        string repoUri,
+        string checkoutRef,
+        CancellationToken cancellationToken)
+        => await PrepareNoNameCloneInternal(repoUri, checkoutRef, false, cancellationToken);
+
+    public async Task<LocalPath> PrepareBareClone(
+        SourceMapping mapping,
+        string[] remoteUris,
+        CancellationToken cancellationToken)
+        => await PrepareCloneInternal(mapping, remoteUris, null, true, cancellationToken);
+
+    public async Task<LocalPath> PrepareBareClone(
+        string repoUri,
+        CancellationToken cancellationToken)
+        => await PrepareNoNameCloneInternal(repoUri, null, true, cancellationToken);
+
+    private async Task<LocalPath> PrepareCloneInternal(
+        SourceMapping mapping,
+        string[] remoteUris,
+        string? checkoutRef,
+        bool bareClone,
+        CancellationToken cancellationToken)
     {
         if (remoteUris.Length == 0)
         {
@@ -78,27 +107,40 @@ public class RepositoryCloneManager : IRepositoryCloneManager
         {
             // Path should be returned the same for all invocations
             // We checkout a default ref
-            path = await PrepareCloneInternal(remoteUri, mapping.Name, cancellationToken);
+            path = await PrepareCloneInternal(remoteUri, mapping.Name, bareClone, cancellationToken);
         }
 
-        _localGitRepo.Checkout(path, checkoutRef);
+        if (!bareClone && checkoutRef != null)
+        {
+            _localGitRepo.Checkout(path, checkoutRef);
+        }
 
         return path;
     }
 
-    public async Task<LocalPath> PrepareClone(
+    private async Task<LocalPath> PrepareNoNameCloneInternal(
         string repoUri,
-        string checkoutRef,
+        string? checkoutRef,
+        bool bareClone,
         CancellationToken cancellationToken)
     {
         // We store clones in directories named as a hash of the repo URI
         var cloneDir = StringUtils.GetXxHash64(repoUri);
-        var path = await PrepareCloneInternal(repoUri, cloneDir, cancellationToken);
-        _localGitRepo.Checkout(path, checkoutRef);
+        var path = await PrepareCloneInternal(repoUri, cloneDir, bareClone, cancellationToken);
+
+        if (!bareClone && checkoutRef != null)
+        {
+            _localGitRepo.Checkout(path, checkoutRef); 
+        }
+
         return path;
     }
 
-    private async Task<LocalPath> PrepareCloneInternal(string remoteUri, string dirName, CancellationToken cancellationToken)
+    private async Task<LocalPath> PrepareCloneInternal(
+        string remoteUri,
+        string dirName,
+        bool bareClone,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -114,7 +156,7 @@ public class RepositoryCloneManager : IRepositoryCloneManager
         if (!_fileSystem.DirectoryExists(clonePath))
         {
             var repoCloner = _remoteFactory.GetCloner(remoteUri, _logger);
-            repoCloner.Clone(remoteUri, clonePath, gitDirectory: null, bareClone: true /* TODO */);
+            repoCloner.Clone(remoteUri, clonePath, gitDirectory: null, bareClone);
         }
         else
         {
