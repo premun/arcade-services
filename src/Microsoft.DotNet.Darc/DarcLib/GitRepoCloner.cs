@@ -65,11 +65,10 @@ public class GitRepoCloner : IGitRepoCloner
                 },
         };
         
-        _logger.LogInformation("Cloning {repoUri} to {targetDirectory}", repoUri, targetDirectory);
+        _logger.LogInformation("{cloning} {repoUri} to {targetDirectory}", cloneOptions.IsBare ? "Bare-cloning" : "Cloning", repoUri, targetDirectory);
 
         try
         {
-            _logger.LogDebug($"Cloning {repoUri} to {targetDirectory}");
             string repoPath = Repository.Clone(
                 repoUri,
                 targetDirectory,
