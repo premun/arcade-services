@@ -65,6 +65,7 @@ public abstract class VmrManagerBase
     protected async Task<IReadOnlyCollection<VmrIngestionPatch>> UpdateRepoToRevision(
         VmrDependencyUpdate update,
         LocalPath clonePath,
+        bool bareClone,
         string fromRevision,
         Signature author,
         string commitMessage,
@@ -80,13 +81,14 @@ public abstract class VmrManagerBase
             update.TargetRevision,
             _vmrInfo.TmpPath,
             _vmrInfo.TmpPath,
+            bareClone,
             cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
         // Get a list of patches that need to be reverted for this update so that repo changes can be applied
         // This includes all patches that are also modified by the current change
         // (happens when we update repo from which the VMR patches come)
-        var vmrPatchesToRestore = await RestoreVmrPatchedFiles(update.Mapping, patches, cancellationToken);
+        var vmrPatchesToRestore = await RestoreVmrPatchedFiles(update.Mapping, patches, bareClone, cancellationToken);
 
         foreach (var patch in patches)
         {
@@ -293,6 +295,7 @@ public abstract class VmrManagerBase
     protected abstract Task<IReadOnlyCollection<VmrIngestionPatch>> RestoreVmrPatchedFiles(
         SourceMapping mapping,
         IReadOnlyCollection<VmrIngestionPatch> patches,
+        bool bareClone,
         CancellationToken cancellationToken);
 
     /// <summary>

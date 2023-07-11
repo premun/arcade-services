@@ -42,7 +42,7 @@ public class VmrMultipleRemotesTests : VmrTestsBase
         await File.WriteAllTextAsync(versionDetailsPath, versionDetailsContent);
         await GitOperations.CommitAll(InstallerRepoPath, "Point VersionDetails.xml to first location");
 
-        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
+        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone: false);
 
         var expectedFilesFromRepos = new List<LocalPath>
         {
@@ -78,7 +78,7 @@ public class VmrMultipleRemotesTests : VmrTestsBase
         versionDetailsContent = versionDetailsContent.Replace(oldSha, newSha);
         await File.WriteAllTextAsync(versionDetailsPath, versionDetailsContent);
         await GitOperations.CommitAll(InstallerRepoPath, "Point VersionDetails.xml to second location");
-        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
+        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone: false);
 
         CheckFileContents(dependencyFilePath, "New content only in the second folder now");
     }
@@ -96,7 +96,7 @@ public class VmrMultipleRemotesTests : VmrTestsBase
         var vmrSourcesDir = VmrPath / VmrInfo.SourcesDir;
         var dependencyFilePath = vmrSourcesDir / Constants.DependencyRepoName / Constants.GetRepoFileName(Constants.DependencyRepoName);
 
-        await InitializeRepoAtLastCommit(Constants.DependencyRepoName, FirstDependencyPath);
+        await InitializeRepoAtLastCommit(Constants.DependencyRepoName, FirstDependencyPath, bareClone: false);
 
         var expectedFilesFromRepos = new List<LocalPath>
         {
@@ -121,7 +121,7 @@ public class VmrMultipleRemotesTests : VmrTestsBase
             new AdditionalRemote(Constants.DependencyRepoName,  SecondDependencyPath)
         };
 
-        await CallDarcUpdate(Constants.DependencyRepoName, newSha, additionalRemotes);
+        await CallDarcUpdate(Constants.DependencyRepoName, newSha, additionalRemotes, bareClone: false);
 
         CheckFileContents(dependencyFilePath, "New content only in the second folder now");
     }

@@ -74,6 +74,7 @@ public class VmrInitializer : VmrManagerBase, IVmrInitializer
         string? targetRevision,
         string? targetVersion,
         bool initializeDependencies,
+        bool bareClone,
         LocalPath sourceMappingsPath,
         IReadOnlyCollection<AdditionalRemote> additionalRemotes,
         string? readmeTemplatePath,
@@ -121,7 +122,7 @@ public class VmrInitializer : VmrManagerBase, IVmrInitializer
                     continue;
                 }
 
-                await InitializeRepository(update, additionalRemotes, readmeTemplatePath, tpnTemplatePath, cancellationToken);
+                await InitializeRepository(update, additionalRemotes, readmeTemplatePath, tpnTemplatePath, bareClone, cancellationToken);
             }
         }
         catch (Exception)
@@ -148,6 +149,7 @@ public class VmrInitializer : VmrManagerBase, IVmrInitializer
         IReadOnlyCollection<AdditionalRemote> additionalRemotes,
         string? readmeTemplatePath,
         string? tpnTemplatePath,
+        bool bareClone,
         CancellationToken cancellationToken)
     {
         _logger.LogInformation("Initializing {name} at {revision}..", update.Mapping.Name, update.TargetRevision);
@@ -158,9 +160,11 @@ public class VmrInitializer : VmrManagerBase, IVmrInitializer
             .Prepend(update.RemoteUri)
             .ToArray();
 
-        var clonePath = await _cloneManager.PrepareBareClone(
+        var clonePath = await _cloneManager.PrepareClone(
             update.Mapping,
             remotes,
+            update.TargetRevision,
+            bareClone,
             cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -175,6 +179,7 @@ public class VmrInitializer : VmrManagerBase, IVmrInitializer
         await UpdateRepoToRevision(
             update,
             clonePath,
+            bareClone,
             Constants.EmptyGitObject,
             DotnetBotCommitSignature,
             commitMessage,
@@ -189,6 +194,7 @@ public class VmrInitializer : VmrManagerBase, IVmrInitializer
     protected override Task<IReadOnlyCollection<VmrIngestionPatch>> RestoreVmrPatchedFiles(
         SourceMapping mapping,
         IReadOnlyCollection<VmrIngestionPatch> patches,
+        bool bareClone,
         CancellationToken cancellationToken)
     {
         // We only need to apply VMR patches that belong to the mapping, nothing to restore from before

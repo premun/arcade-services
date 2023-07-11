@@ -4,12 +4,10 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
-using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.DarcLib.Helpers;
 using Microsoft.DotNet.DarcLib.Models.VirtualMonoRepo;
 using Microsoft.DotNet.DarcLib.VirtualMonoRepo;
 using NUnit.Framework;
-
 
 namespace Microsoft.DotNet.Darc.Tests.VirtualMonoRepo;
 
@@ -20,11 +18,13 @@ public class VmrSyncAdditionalMappingsTest : VmrTestsBase
     private readonly string _fileRelativePath = new NativePath("content") / "special-file.txt";
 
     [Test]
-    public async Task NonSrcContentIsSyncedTest()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task NonSrcContentIsSyncedTest(bool bareClone)
     {
         // Initialize the repo
 
-        await InitializeRepoAtLastCommit(Constants.ProductRepoName, ProductRepoPath);
+        await InitializeRepoAtLastCommit(Constants.ProductRepoName, ProductRepoPath, bareClone);
 
         var expectedFilesFromRepos = new List<LocalPath>
         {
@@ -48,7 +48,7 @@ public class VmrSyncAdditionalMappingsTest : VmrTestsBase
             ProductRepoPath / _fileRelativePath, 
             "A file with a change that needs to be copied outside of the src folder");
         await GitOperations.CommitAll(ProductRepoPath, "Change file");
-        await UpdateRepoToLastCommit(Constants.ProductRepoName, ProductRepoPath);
+        await UpdateRepoToLastCommit(Constants.ProductRepoName, ProductRepoPath, bareClone);
 
         CheckFileContents(VmrPath / _fileName, "A file with a change that needs to be copied outside of the src folder");
         await GitOperations.CheckAllIsCommitted(VmrPath);

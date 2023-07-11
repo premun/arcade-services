@@ -21,6 +21,7 @@ public interface IVmrPatchHandler
         string sha2,
         LocalPath destDir,
         LocalPath tmpPath,
+        bool bareClone,
         CancellationToken cancellationToken);
 
     IReadOnlyCollection<string> GetVmrPatches(SourceMapping mapping);

@@ -37,8 +37,8 @@ public class VmrRepoDeletionTest : VmrTestsBase
     public async Task RepoIsDeletedFromVmrTest()
     {
         var sourceMappingsPath = InstallerRepoPath / _sourceMappingsRelativePath;
-        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath, sourceMappingsPath);
-        await InitializeRepoAtLastCommit(Constants.ProductRepoName, ProductRepoPath, sourceMappingsPath);
+        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone: false, sourceMappingsPath);
+        await InitializeRepoAtLastCommit(Constants.ProductRepoName, ProductRepoPath, bareClone: false, sourceMappingsPath);
 
         var expectedFilesFromRepos = new List<LocalPath>
         {
@@ -71,7 +71,7 @@ public class VmrRepoDeletionTest : VmrTestsBase
 
         await GitOperations.CommitAll(InstallerRepoPath, "Change source-mappings");
 
-        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
+        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone: false);
 
         expectedFilesFromRepos = new List<LocalPath>
         {

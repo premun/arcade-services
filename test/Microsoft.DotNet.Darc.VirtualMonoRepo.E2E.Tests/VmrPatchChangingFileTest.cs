@@ -19,7 +19,9 @@ public class VmrPatchChangingFileTest : VmrPatchesTestsBase
     }
 
     [Test]
-    public async Task PatchesAreAppliedTest()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task PatchesAreAppliedTest(bool bareClone)
     {
         var patchPathInVmr = VmrPatchesDir / PatchFileName;
         var productRepoFileName = Constants.GetRepoFileName(Constants.ProductRepoName);
@@ -30,8 +32,8 @@ public class VmrPatchChangingFileTest : VmrPatchesTestsBase
 
         // initialize repo with a vmr patch
 
-        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
-        await InitializeRepoAtLastCommit(Constants.ProductRepoName, ProductRepoPath);
+        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone);
+        await InitializeRepoAtLastCommit(Constants.ProductRepoName, ProductRepoPath, bareClone);
 
         var expectedFilesFromRepos = new List<LocalPath>
         {
@@ -56,7 +58,7 @@ public class VmrPatchChangingFileTest : VmrPatchesTestsBase
             InstallerPatchesDir / PatchFileName,
             File.ReadAllText(VmrTestsOneTimeSetUp.ResourcesPath / "changed-patch.patch"));
         await GitOperations.CommitAll(InstallerRepoPath, "Change the patch file");
-        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
+        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone);
 
         CheckDirectoryContents(VmrPath, expectedFiles);
         CompareFileContents(ProductRepoFilePathInVmr, fileAfterChangedPatch);
@@ -65,7 +67,7 @@ public class VmrPatchChangingFileTest : VmrPatchesTestsBase
 
         File.Delete(InstallerPatchesDir / PatchFileName);
         await GitOperations.CommitAll(InstallerRepoPath, "Remove the patch file");
-        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
+        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone);
 
         expectedFiles.Remove(patchPathInVmr);
         CheckDirectoryContents(VmrPath, expectedFiles);
@@ -75,7 +77,7 @@ public class VmrPatchChangingFileTest : VmrPatchesTestsBase
 
         File.Copy(VmrTestsOneTimeSetUp.ResourcesPath / newPatchFileName, InstallerPatchesDir / newPatchFileName);
         await GitOperations.CommitAll(InstallerRepoPath, "Add a new patch file");
-        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
+        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone);
 
         expectedFiles.Add(VmrPatchesDir / newPatchFileName);
         CheckDirectoryContents(VmrPath, expectedFiles);
@@ -86,6 +88,6 @@ public class VmrPatchChangingFileTest : VmrPatchesTestsBase
         await File.WriteAllTextAsync(ProductRepoPath / productRepoFileName, "New content");
         await GitOperations.CommitAll(ProductRepoPath, "Change file in product repo");
         var commit = await GitOperations.GetRepoLastCommit(ProductRepoPath);
-        await this.Awaiting(_ => CallDarcUpdate(Constants.ProductRepoName, commit)).Should().ThrowAsync<Exception>();
+        await this.Awaiting(_ => CallDarcUpdate(Constants.ProductRepoName, commit, bareClone)).Should().ThrowAsync<Exception>();
     }
 }

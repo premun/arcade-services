@@ -31,10 +31,12 @@ public class LoadSourceMappingsFromInstallerTest : VmrTestsBase
     }
 
     [Test]
-    public async Task LoadCorrectSourceMappingsVersionTest()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task LoadCorrectSourceMappingsVersionTest(bool bareClone)
     {
         var sourceMappingsPath = InstallerRepoPath / _sourceMappingsRelativePath;
-        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath, sourceMappingsPath);
+        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone, sourceMappingsPath);
 
         var expectedFilesFromRepos = new List<LocalPath>
         {
@@ -69,7 +71,7 @@ public class LoadSourceMappingsFromInstallerTest : VmrTestsBase
 
         await GitOperations.CommitAll(InstallerRepoPath, "Change source-mappings");
 
-        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
+        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone);
 
         CheckDirectoryContents(VmrPath, expectedFiles);
     }
@@ -80,7 +82,7 @@ public class LoadSourceMappingsFromInstallerTest : VmrTestsBase
         await CopyRepoAndCreateVersionDetails(CurrentTestDirectory, Constants.ProductRepoName);
 
         var sourceMappingsPath = InstallerRepoPath / _sourceMappingsRelativePath;
-        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath, sourceMappingsPath);
+        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone: false, sourceMappingsPath);
 
         var expectedFilesFromRepos = new List<LocalPath>
         {
@@ -118,7 +120,7 @@ public class LoadSourceMappingsFromInstallerTest : VmrTestsBase
         await GitOperations.CommitAll(InstallerRepoPath, "Added new dependency");
 
         // We will sync new installer, which should bring in the new product repo
-        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
+        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone: false);
 
         expectedFiles = GetExpectedFilesInVmr(
             VmrPath,

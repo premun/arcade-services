@@ -140,34 +140,34 @@ public abstract class VmrTestsBase
         CheckFileContents(filePath, resourceContent);
     }
 
-    protected async Task InitializeRepoAtLastCommit(string repoName, NativePath repoPath, LocalPath? sourceMappingsPath = null)
+    protected async Task InitializeRepoAtLastCommit(string repoName, NativePath repoPath, bool bareClone, LocalPath? sourceMappingsPath = null)
     {
         var commit = await GitOperations.GetRepoLastCommit(repoPath);
         var sourceMappings = sourceMappingsPath ?? VmrPath / VmrInfo.SourcesDir / VmrInfo.SourceMappingsFileName;
-        await CallDarcInitialize(repoName, commit, sourceMappings);
+        await CallDarcInitialize(repoName, commit, sourceMappings, bareClone);
     }
 
-    protected async Task UpdateRepoToLastCommit(string repoName, NativePath repoPath)
+    protected async Task UpdateRepoToLastCommit(string repoName, NativePath repoPath, bool bareClone)
     {
         var commit = await GitOperations.GetRepoLastCommit(repoPath);
-        await CallDarcUpdate(repoName, commit);
+        await CallDarcUpdate(repoName, commit, bareClone);
     }
 
-    private async Task CallDarcInitialize(string repository, string commit, LocalPath sourceMappingsPath)
+    private async Task CallDarcInitialize(string repository, string commit, LocalPath sourceMappingsPath, bool bareClone)
     {
         var vmrInitializer = _serviceProvider.Value.GetRequiredService<IVmrInitializer>();
-        await vmrInitializer.InitializeRepository(repository, commit, null, true, sourceMappingsPath, Array.Empty<AdditionalRemote>(), null, null, _cancellationToken.Token);
+        await vmrInitializer.InitializeRepository(repository, commit, null, true, bareClone, sourceMappingsPath, Array.Empty<AdditionalRemote>(), null, null, _cancellationToken.Token);
     }
 
-    protected async Task CallDarcUpdate(string repository, string commit)
+    protected async Task CallDarcUpdate(string repository, string commit, bool bareClone)
     {
-        await CallDarcUpdate(repository, commit, Array.Empty<AdditionalRemote>());
+        await CallDarcUpdate(repository, commit, Array.Empty<AdditionalRemote>(), bareClone);
     }
 
-    protected async Task CallDarcUpdate(string repository, string commit, AdditionalRemote[] additionalRemotes)
+    protected async Task CallDarcUpdate(string repository, string commit, AdditionalRemote[] additionalRemotes, bool bareClone)
     {
         var vmrUpdater = _serviceProvider.Value.GetRequiredService<IVmrUpdater>();
-        await vmrUpdater.UpdateRepository(repository, commit, null, false, true, additionalRemotes, null, null, _cancellationToken.Token);
+        await vmrUpdater.UpdateRepository(repository, commit, null, true, true, bareClone, additionalRemotes, null, null, _cancellationToken.Token);
     }
 
     protected async Task<List<string>> CallDarcCloakedFileScan(string baselinesFilePath)

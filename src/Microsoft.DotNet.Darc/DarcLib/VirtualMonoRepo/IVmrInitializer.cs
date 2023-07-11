@@ -24,6 +24,7 @@ public interface IVmrInitializer
         string? targetRevision,
         string? targetVersion,
         bool initializeDependencies,
+        bool bareClone,
         LocalPath sourceMappingsPath,
         IReadOnlyCollection<AdditionalRemote> additionalRemotes,
         string? readmeTemplatePath,

@@ -67,7 +67,6 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
     private readonly IVmrDependencyTracker _dependencyTracker;
     private readonly IRepositoryCloneManager _cloneManager;
     private readonly IVmrPatchHandler _patchHandler;
-    private readonly IProcessManager _processManager;
     private readonly IFileSystem _fileSystem;
     private readonly ILogger<VmrUpdater> _logger;
     private readonly ISourceManifest _sourceManifest;
@@ -97,7 +96,6 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
         _dependencyTracker = dependencyTracker;
         _cloneManager = cloneManager;
         _patchHandler = patchHandler;
-        _processManager = processManager;
         _fileSystem = fileSystem;
         _thirdPartyNoticesGenerator = thirdPartyNoticesGenerator;
         _readmeComponentListGenerator = readmeComponentListGenerator;
@@ -110,6 +108,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
         string? targetVersion,
         bool noSquash,
         bool updateDependencies,
+        bool bareClone,
         IReadOnlyCollection<AdditionalRemote> additionalRemotes,
         string? readmeTemplatePath,
         string? tpnTemplatePath,
@@ -130,15 +129,20 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
         if (_vmrInfo.SourceMappingsPath != null
             && _vmrInfo.SourceMappingsPath.StartsWith(VmrInfo.GetRelativeRepoSourcesPath(mapping)))
         {
-            var fileRelativePath = _vmrInfo.SourceMappingsPath.Substring(VmrInfo.GetRelativeRepoSourcesPath(mapping).Length);
+            string fileRelativePath = _vmrInfo.SourceMappingsPath.Substring(VmrInfo.GetRelativeRepoSourcesPath(mapping).Length);
 
-            var remotes = additionalRemotes
+            string[] remotes = additionalRemotes
                 .Where(r => r.Mapping == mappingName)
                 .Select(r => r.RemoteUri)
                 .Prepend(mapping.DefaultRemote)
                 .ToArray();
 
-            var clonePath = await _cloneManager.PrepareBareClone(mapping, remotes, cancellationToken);
+            LocalPath clonePath = await _cloneManager.PrepareClone(
+                mapping,
+                remotes,
+                targetRevision ?? mapping.DefaultRef,
+                bareClone,
+                cancellationToken);
 
             _logger.LogDebug($"Loading a new version of source mappings from {clonePath / fileRelativePath}");
             await _dependencyTracker.InitializeSourceMappings(clonePath / fileRelativePath);
@@ -158,28 +162,31 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
         if (updateDependencies)
         {
             await UpdateRepositoryRecursively(
-                dependencyUpdate, 
-                noSquash, 
-                additionalRemotes, 
-                readmeTemplatePath, 
-                tpnTemplatePath, 
+                dependencyUpdate,
+                bareClone,
+                noSquash,
+                additionalRemotes,
+                readmeTemplatePath,
+                tpnTemplatePath,
                 cancellationToken);
         }
         else
         {
             await UpdateRepositoryInternal(
-                dependencyUpdate, 
-                noSquash, 
-                reapplyVmrPatches: true, 
-                additionalRemotes, 
-                readmeTemplatePath, 
-                tpnTemplatePath, 
+                dependencyUpdate,
+                bareClone,
+                noSquash,
+                reapplyVmrPatches: true,
+                additionalRemotes,
+                readmeTemplatePath,
+                tpnTemplatePath,
                 cancellationToken);
         }
     }
 
     private async Task<IReadOnlyCollection<VmrIngestionPatch>> UpdateRepositoryInternal(
         VmrDependencyUpdate update,
+        bool bareClone,
         bool noSquash,
         bool reapplyVmrPatches,
         IReadOnlyCollection<AdditionalRemote> additionalRemotes,
@@ -200,7 +207,12 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
             .Prepend(update.RemoteUri)
             .ToArray();
 
-        LocalPath clonePath = await _cloneManager.PrepareBareClone(update.Mapping, remotes, cancellationToken);
+        LocalPath clonePath = await _cloneManager.PrepareClone(
+            update.Mapping,
+            remotes,
+            update.TargetRevision,
+            bareClone,
+            cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -290,6 +302,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
             return await UpdateRepoToRevision(
                 update,
                 clonePath,
+                bareClone,
                 currentSha,
                 DotnetBotCommitSignature,
                 message,
@@ -318,6 +331,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
             var patches = await UpdateRepoToRevision(
                 update,
                 clonePath,
+                bareClone,
                 currentSha,
                 commitToCopy.Author,
                 message,
@@ -340,6 +354,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
     /// </summary>
     private async Task UpdateRepositoryRecursively(
         VmrDependencyUpdate rootUpdate,
+        bool bareClone,
         bool noSquash,
         IReadOnlyCollection<AdditionalRemote> additionalRemotes,
         string? readmeTemplatePath,
@@ -418,12 +433,13 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
             try
             {
                 patchesToReapply = await UpdateRepositoryInternal(
-                    update, 
-                    noSquash, 
-                    false, 
-                    additionalRemotes, 
-                    readmeTemplatePath, 
-                    tpnTemplatePath, 
+                    update,
+                    bareClone,
+                    noSquash,
+                    false,
+                    additionalRemotes,
+                    readmeTemplatePath,
+                    tpnTemplatePath,
                     cancellationToken);
             }
             catch(Exception)
@@ -507,6 +523,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
     protected override async Task<IReadOnlyCollection<VmrIngestionPatch>> RestoreVmrPatchedFiles(
         SourceMapping updatedMapping,
         IReadOnlyCollection<VmrIngestionPatch> patches,
+        bool bareClone,
         CancellationToken cancellationToken)
     {
         IReadOnlyCollection<VmrIngestionPatch> vmrPatchesToRestore = await GetVmrPatchesToRestore(
@@ -574,7 +591,7 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
                 source.RemoteUri,
                 source.CommitSha);
 
-            var clonePath = await _cloneManager.PrepareBareClone(source.RemoteUri, cancellationToken);
+            var clonePath = await _cloneManager.PrepareClone(source.RemoteUri, source.CommitSha, bareClone, cancellationToken);
 
             foreach ((UnixPath relativePath, UnixPath pathInVmr) in group)
             {

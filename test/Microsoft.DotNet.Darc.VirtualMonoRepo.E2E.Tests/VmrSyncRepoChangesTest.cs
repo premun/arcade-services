@@ -9,7 +9,6 @@ using Microsoft.DotNet.DarcLib.Models.VirtualMonoRepo;
 using Microsoft.DotNet.DarcLib.VirtualMonoRepo;
 using NUnit.Framework;
 
-
 namespace Microsoft.DotNet.Darc.Tests.VirtualMonoRepo;
 
 [TestFixture]
@@ -30,14 +29,16 @@ public class VmrSyncRepoChangesTest :  VmrTestsBase
     }
 
     [Test]
-    public async Task FileChangesAreSyncedTest()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task FileChangesAreSyncedTest(bool bareClone)
     {
-        await EnsureTestRepoIsInitialized();
+        await EnsureTestRepoIsInitialized(bareClone);
 
         File.WriteAllText(ProductRepoPath / _productRepoFileName, "Test changes in repo file");
         await GitOperations.CommitAll(ProductRepoPath, "Changing a file in the repo");
 
-        await UpdateRepoToLastCommit(Constants.ProductRepoName, ProductRepoPath);
+        await UpdateRepoToLastCommit(Constants.ProductRepoName, ProductRepoPath, bareClone);
 
         var expectedFilesFromRepos = new List<LocalPath>
         {
@@ -58,7 +59,9 @@ public class VmrSyncRepoChangesTest :  VmrTestsBase
     }
 
     [Test]
-    public async Task FileIsIncludedTest()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task FileIsIncludedTest(bool bareClone)
     {
         var excludedDir = ProductRepoPath / "excluded";
         var excludedFileName = "excluded.txt";
@@ -68,12 +71,12 @@ public class VmrSyncRepoChangesTest :  VmrTestsBase
         File.WriteAllText(excludedFile, "File to be excluded");
         await GitOperations.CommitAll(ProductRepoPath, "Create an excluded file");
 
-        await EnsureTestRepoIsInitialized();
+        await EnsureTestRepoIsInitialized(bareClone);
 
         File.Move(excludedFile, ProductRepoPath / excludedFileName);
         await GitOperations.CommitAll(ProductRepoPath, "Move a file from excluded to included folder");
 
-        await UpdateRepoToLastCommit(Constants.ProductRepoName, ProductRepoPath);
+        await UpdateRepoToLastCommit(Constants.ProductRepoName, ProductRepoPath, bareClone);
 
         var expectedFilesFromRepos = new List<LocalPath>
         {
@@ -94,7 +97,9 @@ public class VmrSyncRepoChangesTest :  VmrTestsBase
     }
 
     [Test]
-    public async Task SubmodulesAreInlinedProperlyTest()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task SubmodulesAreInlinedProperlyTest(bool bareClone)
     {
         var submodulesDir = "externals";
         var submodulePathInVmr = VmrPath / VmrInfo.SourcesDir / Constants.ProductRepoName / submodulesDir / Constants.SecondRepoName;
@@ -103,12 +108,12 @@ public class VmrSyncRepoChangesTest :  VmrTestsBase
         var additionalSubmoduleFilePath = submodulePathInVmr / additionalFileName;
         var submoduleName = "submodule1";
 
-        await EnsureTestRepoIsInitialized();
+        await EnsureTestRepoIsInitialized(bareClone);
 
         var submoduleRelativePath = new NativePath("externals") / Constants.SecondRepoName;
         await GitOperations.InitializeSubmodule(ProductRepoPath, submoduleName, SecondRepoPath, submoduleRelativePath);
         await GitOperations.CommitAll(ProductRepoPath, "Add submodule");
-        await UpdateRepoToLastCommit(Constants.ProductRepoName, ProductRepoPath);
+        await UpdateRepoToLastCommit(Constants.ProductRepoName, ProductRepoPath, bareClone);
 
         var expectedFilesFromRepos = new List<LocalPath>
         {
@@ -136,7 +141,7 @@ public class VmrSyncRepoChangesTest :  VmrTestsBase
         await GitOperations.PullMain(ProductRepoPath / submoduleRelativePath);
         
         await GitOperations.CommitAll(ProductRepoPath, "Checkout submodule");
-        await UpdateRepoToLastCommit(Constants.ProductRepoName, ProductRepoPath);
+        await UpdateRepoToLastCommit(Constants.ProductRepoName, ProductRepoPath, bareClone);
 
         expectedFiles.Add(additionalSubmoduleFilePath);
 
@@ -147,7 +152,7 @@ public class VmrSyncRepoChangesTest :  VmrTestsBase
 
         await GitOperations.RemoveSubmodule(ProductRepoPath, submoduleRelativePath);
         await GitOperations.CommitAll(ProductRepoPath, "Remove the submodule");
-        await UpdateRepoToLastCommit(Constants.ProductRepoName, ProductRepoPath);
+        await UpdateRepoToLastCommit(Constants.ProductRepoName, ProductRepoPath, bareClone);
 
         expectedFiles.Remove(submoduleFilePath);
         expectedFiles.Remove(additionalSubmoduleFilePath);
@@ -203,9 +208,9 @@ public class VmrSyncRepoChangesTest :  VmrTestsBase
         await WriteSourceMappingsInVmr(sourceMappings);
     }
 
-    private async Task EnsureTestRepoIsInitialized()
+    private async Task EnsureTestRepoIsInitialized(bool bareClone)
     {
-        await InitializeRepoAtLastCommit(Constants.ProductRepoName, ProductRepoPath);
+        await InitializeRepoAtLastCommit(Constants.ProductRepoName, ProductRepoPath, bareClone);
 
         var expectedFilesFromRepos = new List<LocalPath>
         {

@@ -16,6 +16,7 @@ public interface IVmrUpdater
     /// <param name="mappingName">Name of a repository mapping</param>
     /// <param name="targetRevision">Revision (commit SHA, branch, tag..) onto which to synchronize, leave empty for HEAD</param>
     /// <param name="targetVersion">Version of packages, that the SHA we're updating to, produced</param>
+    /// <param name="bareClone">Whether to bare-clone individual repositories</param>
     /// <param name="noSquash">Whether to pull changes commit by commit instead of squashing all updates into one</param>
     /// <param name="updateDependencies">When true, updates dependencies (from Version.Details.xml) recursively</param>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -25,6 +26,7 @@ public interface IVmrUpdater
         string? targetVersion,
         bool noSquash,
         bool updateDependencies,
+        bool bareClone,
         IReadOnlyCollection<AdditionalRemote> additionalRemotes,
         string? readmeTemplatePath,
         string? tpnTemplatePath,

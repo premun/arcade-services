@@ -3,11 +3,15 @@
 
 using System.Collections.Generic;
 using CommandLine;
+using Microsoft.DotNet.DarcLib;
 
 namespace Microsoft.DotNet.Darc.Options.VirtualMonoRepo;
 
 internal abstract class VmrSyncCommandLineOptions : VmrCommandLineOptions
 {
+    [Option('r', "recursive", Required = false, HelpText = $"Process also dependencies (from {VersionFiles.VersionDetailsXml}) recursively.")]
+    public bool Recursive { get; set; } = false;
+
     [Option("additional-remotes", Required = false, HelpText =
         "Comma separated list of additional remote URIs to add to mappings in the format [mapping name]:[remote URI]. " +
         "Example: installer:https://github.com/myfork/installer,sdk:/local/path/to/sdk")]
@@ -17,6 +21,9 @@ internal abstract class VmrSyncCommandLineOptions : VmrCommandLineOptions
         "Repository names in the form of NAME or NAME:REVISION where REVISION is a commit SHA or other git reference (branch, tag). " +
         "Omitting REVISION will synchronize the repo to current HEAD.")]
     public IEnumerable<string> Repositories { get; set; }
+
+    [Option("bare", Required = false, HelpText = $"Clones individual repositories in bare mode.")]
+    public bool BareMode { get; set; } = false;
 
     [Option("readme-template", Required = false, HelpText = "Path to a template for generating VMRs README file. Leave empty to skip generation.")]
     public string ReadMeTemplate { get; set; }

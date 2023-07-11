@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using LibGit2Sharp;
 using Microsoft.DotNet.Darc.Models.VirtualMonoRepo;
 using Microsoft.DotNet.DarcLib.Helpers;
 using Microsoft.Extensions.Logging;
@@ -16,17 +17,18 @@ public record AdditionalRemote(string Mapping, string RemoteUri);
 
 public interface IRepositoryCloneManager
 {
-    Task<LocalPath> PrepareClone(string repoUri, string checkoutRef, CancellationToken cancellationToken);
+    Task<LocalPath> PrepareClone(
+        string repoUri,
+        string? checkoutRef,
+        bool bareClone,
+        CancellationToken cancellationToken);
 
     Task<LocalPath> PrepareClone(
         SourceMapping mapping,
         string[] remotes,
-        string checkoutRef,
+        string? checkoutRef,
+        bool bareClone,
         CancellationToken cancellationToken);
-
-    Task<LocalPath> PrepareBareClone(string repoUri, CancellationToken cancellationToken);
-
-    Task<LocalPath> PrepareBareClone(SourceMapping mapping, string[] remotes, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -69,31 +71,23 @@ public class RepositoryCloneManager : IRepositoryCloneManager
     public async Task<LocalPath> PrepareClone(
         SourceMapping mapping,
         string[] remoteUris,
-        string checkoutRef,
+        string? checkoutRef,
+        bool bareClone,
         CancellationToken cancellationToken)
-        => await PrepareCloneInternal(mapping, remoteUris, checkoutRef, false, cancellationToken);
+        => await PrepareCloneInternal(remoteUris, checkoutRef, mapping.Name, bareClone, cancellationToken);
 
     public async Task<LocalPath> PrepareClone(
         string repoUri,
-        string checkoutRef,
+        string? checkoutRef,
+        bool bareClone,
         CancellationToken cancellationToken)
-        => await PrepareNoNameCloneInternal(repoUri, checkoutRef, false, cancellationToken);
+        // We store clones in directories named as a hash of the repo URI
+        => await PrepareCloneInternal(new[] { repoUri }, checkoutRef, StringUtils.GetXxHash64(repoUri), bareClone, cancellationToken);
 
-    public async Task<LocalPath> PrepareBareClone(
-        SourceMapping mapping,
-        string[] remoteUris,
-        CancellationToken cancellationToken)
-        => await PrepareCloneInternal(mapping, remoteUris, null, true, cancellationToken);
-
-    public async Task<LocalPath> PrepareBareClone(
-        string repoUri,
-        CancellationToken cancellationToken)
-        => await PrepareNoNameCloneInternal(repoUri, null, true, cancellationToken);
-
-    private async Task<LocalPath> PrepareCloneInternal(
-        SourceMapping mapping,
+    public async Task<LocalPath> PrepareCloneInternal(
         string[] remoteUris,
         string? checkoutRef,
+        string cloneDir,
         bool bareClone,
         CancellationToken cancellationToken)
     {
@@ -107,30 +101,20 @@ public class RepositoryCloneManager : IRepositoryCloneManager
         {
             // Path should be returned the same for all invocations
             // We checkout a default ref
-            path = await PrepareCloneInternal(remoteUri, mapping.Name, bareClone, cancellationToken);
+            path = await PrepareCloneInternal(remoteUri, cloneDir, bareClone, cancellationToken);
         }
 
-        if (!bareClone && checkoutRef != null)
+        if (checkoutRef != null)
         {
-            _localGitRepo.Checkout(path, checkoutRef);
-        }
-
-        return path;
-    }
-
-    private async Task<LocalPath> PrepareNoNameCloneInternal(
-        string repoUri,
-        string? checkoutRef,
-        bool bareClone,
-        CancellationToken cancellationToken)
-    {
-        // We store clones in directories named as a hash of the repo URI
-        var cloneDir = StringUtils.GetXxHash64(repoUri);
-        var path = await PrepareCloneInternal(repoUri, cloneDir, bareClone, cancellationToken);
-
-        if (!bareClone && checkoutRef != null)
-        {
-            _localGitRepo.Checkout(path, checkoutRef); 
+            if (bareClone)
+            {
+                using var repository = new Repository(path);
+                repository.Refs.UpdateTarget("HEAD", checkoutRef);
+            }
+            else
+            {
+                _localGitRepo.Checkout(path, checkoutRef);
+            }
         }
 
         return path;

@@ -26,7 +26,9 @@ public class VmrPatchAddingSubmoduleFileTest : VmrPatchesTestsBase
     }
 
     [Test]
-    public async Task PatchesAreAppliedTest()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task PatchesAreAppliedTest(bool bareClone)
     {
         var vmrSourcesPath = VmrPath / VmrInfo.SourcesDir;
         const string FileCreatedByPatch = "patched-submodule-file.txt";
@@ -45,8 +47,8 @@ public class VmrPatchAddingSubmoduleFileTest : VmrPatchesTestsBase
 
         // initialize repo with a vmr patch
 
-        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
-        await InitializeRepoAtLastCommit(Constants.ProductRepoName, ProductRepoPath);
+        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone);
+        await InitializeRepoAtLastCommit(Constants.ProductRepoName, ProductRepoPath, bareClone);
 
         var expectedFilesFromRepos = new List<LocalPath>
         {
@@ -71,7 +73,7 @@ public class VmrPatchAddingSubmoduleFileTest : VmrPatchesTestsBase
 
         File.Delete(patchPathInRepo);
         await GitOperations.CommitAll(InstallerRepoPath, "Remove the patch file");
-        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
+        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone);
 
         expectedFiles.Remove(patchPathInVmr);
         expectedFiles.Remove(patchedSubmoduleFileInVmr);
@@ -82,7 +84,7 @@ public class VmrPatchAddingSubmoduleFileTest : VmrPatchesTestsBase
 
         File.Copy(VmrTestsOneTimeSetUp.ResourcesPath / PatchFileName, patchPathInRepo);
         await GitOperations.CommitAll(InstallerRepoPath, "Add the patch back");
-        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
+        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone);
 
         expectedFiles.Add(patchPathInVmr);
         expectedFiles.Add(patchedSubmoduleFileInVmr);
@@ -99,6 +101,6 @@ public class VmrPatchAddingSubmoduleFileTest : VmrPatchesTestsBase
 
         await GitOperations.UpdateSubmodule(ProductRepoPath, submoduleRelativePath);
         var commit = await GitOperations.GetRepoLastCommit(ProductRepoPath);
-        await this.Awaiting(_ => CallDarcUpdate(Constants.ProductRepoName, commit)).Should().ThrowAsync<Exception>();
+        await this.Awaiting(_ => CallDarcUpdate(Constants.ProductRepoName, commit, bareClone)).Should().ThrowAsync<Exception>();
     }
 }

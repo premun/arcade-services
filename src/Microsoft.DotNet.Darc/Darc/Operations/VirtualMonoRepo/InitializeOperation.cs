@@ -33,6 +33,7 @@ internal class InitializeOperation : VmrOperationBase<IVmrInitializer>
             targetRevision,
             null,
             _options.Recursive,
+            _options.BareMode,
             new NativePath(_options.SourceMappings),
             additionalRemotes,
             _options.ReadMeTemplate,

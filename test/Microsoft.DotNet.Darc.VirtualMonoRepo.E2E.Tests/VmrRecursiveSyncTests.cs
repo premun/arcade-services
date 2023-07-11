@@ -37,7 +37,7 @@ public class VmrRecursiveSyncTests : VmrTestsBase
          *  (* marks which version is in the VMR)    
          */
 
-        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
+        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone: false);
 
         var expectedFilesFromRepos = new List<LocalPath>
         {
@@ -114,7 +114,7 @@ public class VmrRecursiveSyncTests : VmrTestsBase
          *  
         */
 
-        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
+        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone: false);
 
         CheckFileContents(installerFilePath, "New version of installer file");
         CheckFileContents(secondRepoFilePath, "New version of product-repo2 file");

@@ -8,7 +8,6 @@ using Microsoft.DotNet.DarcLib.Helpers;
 using Microsoft.DotNet.DarcLib.VirtualMonoRepo;
 using NUnit.Framework;
 
-
 namespace Microsoft.DotNet.Darc.Tests.VirtualMonoRepo;
 
 [TestFixture]
@@ -21,13 +20,15 @@ public class VmrPatchAddingFileTest : VmrPatchesTestsBase
     }
 
     [Test]
-    public async Task VmrPatchAddsFileTest()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task VmrPatchAddsFileTest(bool bareClone)
     {
         var vmrSourcesPath = VmrPath / VmrInfo.SourcesDir;
         var patchPathInRepo = InstallerPatchesDir / PatchFileName;
 
-        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
-        await InitializeRepoAtLastCommit(Constants.ProductRepoName, ProductRepoPath);
+        await InitializeRepoAtLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone);
+        await InitializeRepoAtLastCommit(Constants.ProductRepoName, ProductRepoPath, bareClone);
 
         var newFilePath = vmrSourcesPath / Constants.ProductRepoName / _productRepoNewFile;
         var patchPath = VmrPatchesDir / PatchFileName;
@@ -49,7 +50,7 @@ public class VmrPatchAddingFileTest : VmrPatchesTestsBase
 
         File.Delete(patchPathInRepo);
         await GitOperations.CommitAll(InstallerRepoPath, "Remove the patch file");
-        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath);
+        await UpdateRepoToLastCommit(Constants.InstallerRepoName, InstallerRepoPath, bareClone);
 
         expectedFiles.Remove(newFilePath);
         expectedFiles.Remove(patchPath);

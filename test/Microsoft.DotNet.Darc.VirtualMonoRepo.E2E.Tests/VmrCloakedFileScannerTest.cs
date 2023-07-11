@@ -27,7 +27,7 @@ public class VmrCloakedFileScannerTest : VmrTestsBase
         var baselinesFilePath = VmrTestsOneTimeSetUp.TestsDirectory / "baselineFiles.txt";
         File.Create(baselinesFilePath).Close();
 
-        await InitializeRepoAtLastCommit(Constants.ProductRepoName, ProductRepoPath);
+        await InitializeRepoAtLastCommit(Constants.ProductRepoName, ProductRepoPath, bareClone: false);
 
         // Test the scanner when there are no cloaked files to be found
         var list = await CallDarcCloakedFileScan(baselinesFilePath);

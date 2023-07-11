@@ -4,7 +4,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -76,11 +75,21 @@ public class VmrPatchHandler : IVmrPatchHandler
         string sha2,
         LocalPath destDir,
         LocalPath tmpPath,
+        bool bareClone,
         CancellationToken cancellationToken)
     {
         _logger.LogInformation("Creating patches for {mapping} in {path}..", mapping.Name, destDir);
 
-        var patches = await CreatePatchesRecursive(mapping, repoPath, sha1, sha2, destDir, tmpPath, new UnixPath(mapping.Name), cancellationToken);
+        var patches = await CreatePatchesRecursive(
+            mapping,
+            repoPath,
+            sha1,
+            sha2,
+            destDir,
+            tmpPath,
+            new UnixPath(mapping.Name),
+            bareClone,
+            cancellationToken);
 
         _logger.LogInformation("{count} patch{s} created", patches.Count, patches.Count == 1 ? string.Empty : "es");
 
@@ -95,6 +104,7 @@ public class VmrPatchHandler : IVmrPatchHandler
         LocalPath destDir,
         LocalPath tmpPath,
         UnixPath relativePath,
+        bool bareClone,
         CancellationToken cancellationToken)
     {
         if (_fileSystem.GetFileName(repoPath.Path) == ".git")
@@ -265,6 +275,7 @@ public class VmrPatchHandler : IVmrPatchHandler
                 tmpPath,
                 relativePath,
                 change,
+                bareClone,
                 cancellationToken));
 
             _logger.LogInformation("Patches created for submodule {submodule} of {repo}", change.Name, mapping.Name);
@@ -434,10 +445,11 @@ public class VmrPatchHandler : IVmrPatchHandler
         LocalPath tmpPath,
         UnixPath relativePath,
         SubmoduleChange change,
+        bool bareClone,
         CancellationToken cancellationToken)
     {
         var checkoutCommit = change.Before == Constants.EmptyGitObject ? change.After : change.Before;
-        var clonePath = await _cloneManager.PrepareBareClone(change.Url, cancellationToken);   
+        var clonePath = await _cloneManager.PrepareClone(change.Url, null, bareClone, cancellationToken);   
 
         // We are only interested in filters specific to submodule's path
         ImmutableArray<string> GetSubmoduleFilters(IReadOnlyCollection<string> filters)
@@ -481,6 +493,7 @@ public class VmrPatchHandler : IVmrPatchHandler
             destDir,
             tmpPath,
             new UnixPath(submodulePath),
+            bareClone,
             cancellationToken);
     }
 
