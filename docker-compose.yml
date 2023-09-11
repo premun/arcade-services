@@ -1,0 +1,19 @@
+version: '3.4'
+
+services:
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    container_name: azurite
+    command: "azurite --loose --blobHost 0.0.0.0 --blobPort 10000 --queueHost 0.0.0.0 --queuePort 10001 --location /workspace --debug /workspace/debug.log"
+    hostname: azurite
+    restart: always
+    ports:
+      - 10010:10000
+      - 10011:10001
+      - 10012:10002
+
+  maestro.containerapp:
+    image: ${DOCKER_REGISTRY-}maestrocontainerapp
+    build:
+      context: .
+      dockerfile: src/Maestro/Maestro.ContainerApp/Dockerfile
