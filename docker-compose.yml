@@ -8,13 +8,16 @@ services:
     hostname: azurite
     restart: always
     ports:
-    - 10000:10000
-    - 10001:10001
-    environment:
-    - AZURITE_ACCOUNTS=devstoreaccount1:Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==
+      - 10000:10000
+      - 10001:10001
 
   maestro.containerapp:
     image: ${DOCKER_REGISTRY-}maestrocontainerapp
+    container_name: Maestro.ContainerApp
     build:
       context: .
       dockerfile: src/Maestro/Maestro.ContainerApp/Dockerfile
+    depends_on:
+      - azurite
+    links:
+      - azurite
