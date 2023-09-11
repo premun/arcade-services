@@ -1,7 +1,11 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
 
+#nullable enable
 namespace Maestro.ContainerApp;
 
 /// <summary>
@@ -26,7 +30,7 @@ internal class SimpleConsoleLoggerFormatter : ConsoleFormatter
     private const string DefaultForegroundColor = "\x1B[39m\x1B[22m"; // reset to default foreground color
     private const string DefaultBackgroundColor = "\x1B[49m"; // reset to the background color
 
-    public const string FormatterName = "xharness";
+    public const string FormatterName = "simple";
 
     private readonly SimpleConsoleFormatterOptions _options;
     private readonly string _messagePadding;

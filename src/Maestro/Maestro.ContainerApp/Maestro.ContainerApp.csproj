@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net7.0</TargetFramework>
-    <Nullable>enable</Nullable>
+    <Nullable>disable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>c662444f-6138-4d50-b55b-5d39a57b684f</UserSecretsId>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
@@ -11,9 +11,27 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="FluentValidation.AspNetCore" />
+    <PackageReference Include="Microsoft.AspNetCore.Http" />
+    <PackageReference Include="Microsoft.AspNetCore.Server.HttpSys" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" />
+    <PackageReference Include="Microsoft.AspNetCore.WebHooks.Receivers.GitHub" />
+    <PackageReference Include="Microsoft.AspNetCore.WebHooks.Receivers" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Microsoft.AspNetCore.ApiPagination" />
+    <PackageReference Include="Microsoft.AspNetCore.ApiVersioning" />
+    <PackageReference Include="Microsoft.AspNetCore.ApiVersioning.Swashbuckle" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\Microsoft.DotNet.Darc\DarcLib\Microsoft.DotNet.DarcLib.csproj" />
+    <ProjectReference Include="..\Maestro.AzureDevOps\Maestro.AzureDevOps.csproj" />
+    <ProjectReference Include="..\Maestro.Contracts\Maestro.Contracts.csproj" />
+    <ProjectReference Include="..\Maestro.Data\Maestro.Data.csproj" />
+    <ProjectReference Include="..\Maestro.DataProviders\Maestro.DataProviders.csproj" />
+    <ProjectReference Include="..\Maestro.MergePolicies\Maestro.MergePolicies.csproj" />
+  </ItemGroup>
+  
 </Project>
