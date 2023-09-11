@@ -2,7 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Maestro.ContainerApp;
-using Azure.Identity;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Azure;
 
@@ -20,8 +19,8 @@ builder.Services.AddLogging(b =>
 
 builder.Services.AddAzureClients(clientBuilder =>
 {
-    clientBuilder.AddQueueServiceClient(builder.Configuration["StorageConnectionString:queue"]!);
-    // clientBuilder.AddQueueServiceClient("StorageConnectionString");
+    // TODO: This would get replaced with a connection string from builder.Configuration["StorageConnectionString:queue"]
+    clientBuilder.AddQueueServiceClient("UseDevelopmentStorage=true;DevelopmentStorageProxyUri=http://host.docker.internal");
 });
 
 var app = builder.Build();
