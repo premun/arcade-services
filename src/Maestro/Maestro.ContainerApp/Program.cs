@@ -2,7 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Maestro.ContainerApp;
+using Azure.Identity;
 using Microsoft.Extensions.Logging.Console;
+using Microsoft.Extensions.Azure;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +17,12 @@ builder.Services.AddLogging(b =>
         options.FormatterName = SimpleConsoleLoggerFormatter.FormatterName)
      .AddConsoleFormatter<SimpleConsoleLoggerFormatter, SimpleConsoleFormatterOptions>(
         options => options.TimestampFormat = "[HH:mm:ss] "));
+
+builder.Services.AddAzureClients(clientBuilder =>
+{
+    clientBuilder.AddQueueServiceClient(builder.Configuration["StorageConnectionString:queue"]!);
+    // clientBuilder.AddQueueServiceClient("StorageConnectionString");
+});
 
 var app = builder.Build();
 
