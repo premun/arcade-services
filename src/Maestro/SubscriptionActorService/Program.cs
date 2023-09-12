@@ -29,7 +29,6 @@ public static class Program
             host =>
             {
                 host.RegisterStatefulActorService<SubscriptionActor>("SubscriptionActor");
-                host.RegisterStatefulActorService<PullRequestActor>("PullRequestActor");
                 host.ConfigureServices(Configure);
             });
     }

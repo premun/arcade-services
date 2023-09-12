@@ -16,57 +16,24 @@ using Maestro.Data.Models;
 using Maestro.MergePolicyEvaluation;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.GitHub.Authentication;
-using Microsoft.DotNet.ServiceFabric.ServiceHost;
-using Microsoft.DotNet.ServiceFabric.ServiceHost.Actors;
 using Microsoft.Extensions.Logging;
-using Microsoft.ServiceFabric.Actors;
-using Microsoft.ServiceFabric.Actors.Runtime;
-using Microsoft.ServiceFabric.Data;
 using StackExchange.Redis;
 using Asset = Maestro.Contracts.Asset;
 using AssetData = Microsoft.DotNet.Maestro.Client.Models.AssetData;
 
 namespace SubscriptionActorService
 {
-    namespace unused
-    {
-        // class needed to appease service fabric build time generation of actor code
-        [StatePersistence(StatePersistence.Persisted)]
-        public class PullRequestActor : Actor, IPullRequestActor, IRemindable
-        {
-            public PullRequestActor(ActorService actorService, ActorId actorId) : base(actorService, actorId)
-            {
-            }
-
-            public Task<string> RunActionAsync(string method, string arguments)
-            {
-                throw new NotImplementedException();
-            }
-
-            public Task UpdateAssetsAsync(Guid subscriptionId, int buildId, string sourceRepo, string sourceSha, List<Asset> assets)
-            {
-                throw new NotImplementedException();
-            }
-
-            public Task ReceiveReminderAsync(string reminderName, byte[] state, TimeSpan dueTime, TimeSpan period)
-            {
-                throw new NotImplementedException();
-            }
-        }
-    }
-
     /// <summary>
     ///     A service fabric actor implementation that is responsible for creating and updating pull requests for dependency
     ///     updates.
     /// </summary>
-    public class PullRequestActor : IPullRequestActor, IRemindable, IActionTracker, IActorImplementation
+    public class PullRequestActor : IPullRequestActor, IActionTracker
     {
         private readonly IMergePolicyEvaluator _mergePolicyEvaluator;
         private readonly BuildAssetRegistryContext _context;
         private readonly IRemoteFactory _darcFactory;
         private readonly ILoggerFactory _loggerFactory;
         private readonly IActionRunner _actionRunner;
-        private readonly IActorProxyFactory<ISubscriptionActor> _subscriptionActorFactory;
         private readonly IPullRequestPolicyFailureNotifier _pullRequestPolicyFailureNotifier;
         private readonly IConnectionMultiplexer _redis;
 
@@ -88,7 +55,6 @@ namespace SubscriptionActorService
             IRemoteFactory darcFactory,
             ILoggerFactory loggerFactory,
             IActionRunner actionRunner,
-            IActorProxyFactory<ISubscriptionActor> subscriptionActorFactory,
             IPullRequestPolicyFailureNotifier pullRequestPolicyFailureNotifier,
             IConnectionMultiplexer redis)
         {
@@ -97,46 +63,8 @@ namespace SubscriptionActorService
             _darcFactory = darcFactory;
             _loggerFactory = loggerFactory;
             _actionRunner = actionRunner;
-            _subscriptionActorFactory = subscriptionActorFactory;
             _pullRequestPolicyFailureNotifier = pullRequestPolicyFailureNotifier;
             _redis = redis;
-        }
-
-        public void Initialize(ActorId actorId, IActorStateManager stateManager, IReminderManager reminderManager)
-        {
-            Implementation = GetImplementation(actorId, stateManager, reminderManager);
-        }
-
-        private PullRequestActorImplementation GetImplementation(ActorId actorId, IActorStateManager stateManager, IReminderManager reminderManager)
-        {
-            switch (actorId.Kind)
-            {
-                case ActorIdKind.Guid:
-                    return new NonBatchedPullRequestActorImplementation(actorId,
-                        reminderManager,
-                        stateManager,
-                        _mergePolicyEvaluator,
-                        _context,
-                        _darcFactory,
-                        _loggerFactory,
-                        _actionRunner,
-                        _subscriptionActorFactory,
-                        _pullRequestPolicyFailureNotifier,
-                        _redis);
-                case ActorIdKind.String:
-                    return new BatchedPullRequestActorImplementation(actorId,
-                        reminderManager,
-                        stateManager,
-                        _mergePolicyEvaluator,
-                        _context,
-                        _darcFactory,
-                        _loggerFactory,
-                        _actionRunner,
-                        _subscriptionActorFactory,
-                        _redis);
-                default:
-                    throw new NotSupportedException("Only actorIds of type Guid and String are supported");
-            }
         }
 
         public PullRequestActorImplementation Implementation { get; private set; }
@@ -160,22 +88,6 @@ namespace SubscriptionActorService
         {
             return Implementation.UpdateAssetsAsync(subscriptionId, buildId, sourceRepo, sourceSha, assets);
         }
-
-        public async Task ReceiveReminderAsync(string reminderName, byte[] state, TimeSpan dueTime, TimeSpan period)
-        {
-            if (reminderName == PullRequestActorImplementation.PullRequestCheck)
-            {
-                await Implementation.SynchronizeInProgressPullRequestAsync();
-            }
-            else if (reminderName == PullRequestActorImplementation.PullRequestUpdate)
-            {
-                await Implementation.RunProcessPendingUpdatesAsync();
-            }
-            else
-            {
-                throw new ReminderNotFoundException(reminderName);
-            }
-        }
     }
 
     public abstract class PullRequestActorImplementation : IPullRequestActor, IActionTracker
@@ -187,25 +99,17 @@ namespace SubscriptionActorService
         public const string DependencyUpdateEnd = "[DependencyUpdate]: <> (End)";
 
         protected PullRequestActorImplementation(
-            ActorId id,
-            IReminderManager reminders,
-            IActorStateManager stateManager,
             IMergePolicyEvaluator mergePolicyEvaluator,
             BuildAssetRegistryContext context,
             IRemoteFactory darcFactory,
             ILoggerFactory loggerFactory,
             IActionRunner actionRunner,
-            IActorProxyFactory<ISubscriptionActor> subscriptionActorFactory,
             IConnectionMultiplexer redis)
         {
-            Id = id;
-            Reminders = reminders;
-            StateManager = stateManager;
             MergePolicyEvaluator = mergePolicyEvaluator;
             Context = context;
             DarcRemoteFactory = darcFactory;
             ActionRunner = actionRunner;
-            SubscriptionActorFactory = subscriptionActorFactory;
             LoggerFactory = loggerFactory;
             Logger = loggerFactory.CreateLogger(GetType());
             Redis = redis;
@@ -217,17 +121,15 @@ namespace SubscriptionActorService
 
         public ILogger Logger { get; }
         public ILoggerFactory LoggerFactory { get; }
-        public ActorId Id { get; }
-        public IReminderManager Reminders { get; }
-        public IActorStateManager StateManager { get; }
         public IMergePolicyEvaluator MergePolicyEvaluator { get; }
         public BuildAssetRegistryContext Context { get; }
         public IRemoteFactory DarcRemoteFactory { get; }
         public IActionRunner ActionRunner { get; }
-        public IActorProxyFactory<ISubscriptionActor> SubscriptionActorFactory { get; }
         public IConnectionMultiplexer Redis { get; }
         public IDatabase Db { get; }
         public string SubscriptionId { get; } = string.Empty;
+        public string Repository { get; } = string.Empty;
+        public string Branch { get; } = string.Empty;
         public string PullRequestRedisKey { get; }
         public string PullRequestUpdateRedisKey { get; }
         public string PullRequestCheckRedisKey { get; }
@@ -578,7 +480,7 @@ namespace SubscriptionActorService
             Logger.LogInformation("Updating subscriptions for merged PR");
             foreach (SubscriptionPullRequestUpdate update in subscriptionPullRequestUpdates)
             {
-                ISubscriptionActor actor = SubscriptionActorFactory.Lookup(new ActorId(update.SubscriptionId));
+                ISubscriptionActor actor = null; //= SubscriptionActorFactory.Lookup(new ActorId(update.SubscriptionId));
                 if (!await actor.UpdateForMergedPullRequestAsync(update.BuildId))
                 {
                     Logger.LogInformation($"Failed to update subscription {update.SubscriptionId} for merged PR.");
@@ -597,7 +499,7 @@ namespace SubscriptionActorService
 
             foreach (SubscriptionPullRequestUpdate update in subscriptionPullRequestUpdates)
             {
-                ISubscriptionActor actor = SubscriptionActorFactory.Lookup(new ActorId(update.SubscriptionId));
+                ISubscriptionActor actor = null;// SubscriptionActorFactory.Lookup(new ActorId(update.SubscriptionId));
                 if (!await actor.AddDependencyFlowEventAsync(update.BuildId, flowEvent, reason, policy, "PR", prUrl))
                 {
                     Logger.LogInformation($"Failed to add dependency flow event for {update.SubscriptionId}.");
@@ -1248,27 +1150,19 @@ namespace SubscriptionActorService
         private readonly IPullRequestPolicyFailureNotifier _pullRequestPolicyFailureNotifier;
 
         public NonBatchedPullRequestActorImplementation(
-            ActorId id,
-            IReminderManager reminders,
-            IActorStateManager stateManager,
             IMergePolicyEvaluator mergePolicyEvaluator,
             BuildAssetRegistryContext context,
             IRemoteFactory darcFactory,
             ILoggerFactory loggerFactory,
             IActionRunner actionRunner,
-            IActorProxyFactory<ISubscriptionActor> subscriptionActorFactory,
             IPullRequestPolicyFailureNotifier pullRequestPolicyFailureNotifier,
             IConnectionMultiplexer redis) : base(
-            id,
-            reminders,
-            stateManager,
-            mergePolicyEvaluator,
-            context,
-            darcFactory,
-            loggerFactory,
-            actionRunner,
-            subscriptionActorFactory,
-            redis)
+                mergePolicyEvaluator,
+                context,
+                darcFactory,
+                loggerFactory,
+                actionRunner,
+                redis)
         {
             _lazySubscription = new Lazy<Task<Subscription>>(RetrieveSubscription);
             _pullRequestPolicyFailureNotifier = pullRequestPolicyFailureNotifier;
@@ -1330,32 +1224,24 @@ namespace SubscriptionActorService
     public class BatchedPullRequestActorImplementation : PullRequestActorImplementation
     {
         public BatchedPullRequestActorImplementation(
-            ActorId id,
-            IReminderManager reminders,
-            IActorStateManager stateManager,
             IMergePolicyEvaluator mergePolicyEvaluator,
             BuildAssetRegistryContext context,
             IRemoteFactory darcFactory,
             ILoggerFactory loggerFactory,
             IActionRunner actionRunner,
-            IActorProxyFactory<ISubscriptionActor> subscriptionActorFactory,
             IConnectionMultiplexer redis)
             :
             base(
-            id,
-            reminders,
-            stateManager,
             mergePolicyEvaluator,
             context,
             darcFactory,
             loggerFactory,
             actionRunner,
-            subscriptionActorFactory,
             redis)
         {
         }
 
-        private (string repository, string branch) Target => PullRequestActorId.Parse(Id);
+        private (string repository, string branch) Target => (Repository, Branch);
 
         protected override Task<(string repository, string branch)> GetTargetAsync()
         {
