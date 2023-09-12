@@ -4,6 +4,7 @@
 using Maestro.ContainerApp;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Azure;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +23,8 @@ builder.Services.AddAzureClients(clientBuilder =>
     // TODO: This would get replaced with a connection string from builder.Configuration["StorageConnectionString:queue"]
     clientBuilder.AddQueueServiceClient("UseDevelopmentStorage=true;DevelopmentStorageProxyUri=http://host.docker.internal");
 });
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect("localhost:6379"));
 
 var app = builder.Build();
 
