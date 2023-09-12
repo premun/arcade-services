@@ -37,6 +37,13 @@ public abstract class QueueConsumer<T>
                 continue;
             }
 
+            if (message.DequeueCount > 5)
+            {
+                _logger.LogError($"Message {message.MessageId} has been dequeued too many times, deleting it");
+                await client.DeleteMessageAsync(message.MessageId, message.PopReceipt, cancellationToken);
+                continue;
+            }
+
             try
             {
                 T item = JsonSerializer.Deserialize<T>(message.Body)
