@@ -23,11 +23,17 @@ builder.AddAzureQueues();
 builder.Services.AddHostedService<QueueProcessor>();
 builder.Services.AddTransient<SubscriptionQueueProcessor>();
 
-/// TODO: pass a connection string
-string connectionString = "";
 builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
 {
-    options.UseSqlServer(connectionString);
+    var connectionStringSection = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true"
+        ? builder.Configuration.GetSection("ConnectionStrings")
+        : builder.Configuration.GetSection("ConnectionStringsNonDocker");
+
+    var connectionString = connectionStringSection["BuildAssetRegistry"];
+    if (connectionString != null)
+    {
+        options.UseSqlServer(connectionString);
+    } 
 });
 
 var app = builder.Build();
