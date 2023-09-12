@@ -30,7 +30,7 @@ builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
     options.UseSqlServer(connectionString);
 });
 
-builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect("localhost:6379"));
+builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect("host.docker.internal:6379"));
 
 var app = builder.Build();
 

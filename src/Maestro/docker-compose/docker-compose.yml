@@ -23,8 +23,10 @@ services:
       dockerfile: src/Maestro/Maestro.ContainerApp/Dockerfile
     depends_on:
       - azurite
+      - redis
     links:
       - azurite
+      - redis
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=https://+:443;http://+:80
