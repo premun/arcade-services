@@ -8,6 +8,7 @@ using System.Net;
 using System.Net.Http;
 using System.Runtime.Serialization;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Maestro.Contracts;
 using Maestro.Data;
@@ -21,6 +22,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.ServiceFabric.Actors;
 using Microsoft.ServiceFabric.Actors.Runtime;
 using Microsoft.ServiceFabric.Data;
+using StackExchange.Redis;
 using Asset = Maestro.Contracts.Asset;
 using AssetData = Microsoft.DotNet.Maestro.Client.Models.AssetData;
 
@@ -66,6 +68,7 @@ namespace SubscriptionActorService
         private readonly IActionRunner _actionRunner;
         private readonly IActorProxyFactory<ISubscriptionActor> _subscriptionActorFactory;
         private readonly IPullRequestPolicyFailureNotifier _pullRequestPolicyFailureNotifier;
+        private readonly IConnectionMultiplexer _redis;
 
         /// <summary>
         ///     Creates a new PullRequestActor
@@ -86,7 +89,8 @@ namespace SubscriptionActorService
             ILoggerFactory loggerFactory,
             IActionRunner actionRunner,
             IActorProxyFactory<ISubscriptionActor> subscriptionActorFactory,
-            IPullRequestPolicyFailureNotifier pullRequestPolicyFailureNotifier)
+            IPullRequestPolicyFailureNotifier pullRequestPolicyFailureNotifier,
+            IConnectionMultiplexer redis)
         {
             _mergePolicyEvaluator = mergePolicyEvaluator;
             _context = context;
@@ -95,6 +99,7 @@ namespace SubscriptionActorService
             _actionRunner = actionRunner;
             _subscriptionActorFactory = subscriptionActorFactory;
             _pullRequestPolicyFailureNotifier = pullRequestPolicyFailureNotifier;
+            _redis = redis;
         }
 
         public void Initialize(ActorId actorId, IActorStateManager stateManager, IReminderManager reminderManager)
@@ -116,7 +121,8 @@ namespace SubscriptionActorService
                         _loggerFactory,
                         _actionRunner,
                         _subscriptionActorFactory,
-                        _pullRequestPolicyFailureNotifier);
+                        _pullRequestPolicyFailureNotifier,
+                        _redis);
                 case ActorIdKind.String:
                     return new BatchedPullRequestActorImplementation(actorId,
                         reminderManager,
@@ -126,7 +132,8 @@ namespace SubscriptionActorService
                         _darcFactory,
                         _loggerFactory,
                         _actionRunner,
-                        _subscriptionActorFactory);
+                        _subscriptionActorFactory,
+                        _redis);
                 default:
                     throw new NotSupportedException("Only actorIds of type Guid and String are supported");
             }
@@ -188,7 +195,8 @@ namespace SubscriptionActorService
             IRemoteFactory darcFactory,
             ILoggerFactory loggerFactory,
             IActionRunner actionRunner,
-            IActorProxyFactory<ISubscriptionActor> subscriptionActorFactory)
+            IActorProxyFactory<ISubscriptionActor> subscriptionActorFactory,
+            IConnectionMultiplexer redis)
         {
             Id = id;
             Reminders = reminders;
@@ -200,6 +208,11 @@ namespace SubscriptionActorService
             SubscriptionActorFactory = subscriptionActorFactory;
             LoggerFactory = loggerFactory;
             Logger = loggerFactory.CreateLogger(GetType());
+            Redis = redis;
+            Db = redis.GetDatabase();
+            PullRequestRedisKey = PullRequest + SubscriptionId;
+            PullRequestUpdateRedisKey = PullRequest + SubscriptionId;
+            PullRequestCheckRedisKey = PullRequestCheck + SubscriptionId;
         }
 
         public ILogger Logger { get; }
@@ -212,6 +225,12 @@ namespace SubscriptionActorService
         public IRemoteFactory DarcRemoteFactory { get; }
         public IActionRunner ActionRunner { get; }
         public IActorProxyFactory<ISubscriptionActor> SubscriptionActorFactory { get; }
+        public IConnectionMultiplexer Redis { get; }
+        public IDatabase Db { get; }
+        public string SubscriptionId { get; } = string.Empty;
+        public string PullRequestRedisKey { get; }
+        public string PullRequestUpdateRedisKey { get; }
+        public string PullRequestCheckRedisKey { get; }
 
         public async Task TrackSuccessfulAction(string action, string result)
         {
@@ -289,13 +308,11 @@ namespace SubscriptionActorService
         public async Task<ActionResult<bool>> ProcessPendingUpdatesAsync()
         {
             Logger.LogInformation("Processing pending updates");
-            ConditionalValue<List<UpdateAssetsParameters>> maybeUpdates =
-                await StateManager.TryGetStateAsync<List<UpdateAssetsParameters>>(PullRequestUpdate);
-            List<UpdateAssetsParameters> updates = maybeUpdates.HasValue ? maybeUpdates.Value : null;
+            var maybeUpdates = JsonSerializer.Deserialize<List<UpdateAssetsParameters>>(await Db.StringGetAsync(PullRequestUpdate + SubscriptionId));
+            List<UpdateAssetsParameters> updates = maybeUpdates != null ? maybeUpdates : null;
             if (updates == null || updates.Count < 1)
             {
                 Logger.LogInformation("No Pending Updates");
-                await Reminders.TryUnregisterReminderAsync(PullRequestUpdate);
                 return ActionResult.Create(false, "No Pending Updates");
             }
 
@@ -328,8 +345,7 @@ namespace SubscriptionActorService
                 Logger.LogInformation(result);
             }
 
-            await StateManager.RemoveStateAsync(PullRequestUpdate);
-            await Reminders.TryUnregisterReminderAsync(PullRequestUpdate);
+            await Db.KeyDeleteAsync(PullRequestUpdate + SubscriptionId);
 
             return ActionResult.Create(true, "Pending updates applied. " + result);
         }
@@ -352,15 +368,15 @@ namespace SubscriptionActorService
         /// </returns>
         public virtual async Task<(InProgressPullRequest pr, bool canUpdate)> SynchronizeInProgressPullRequestAsync()
         {
-            ConditionalValue<InProgressPullRequest> maybePr =
-                await StateManager.TryGetStateAsync<InProgressPullRequest>(PullRequest);
-            if (maybePr.HasValue)
+            var maybePr =
+                JsonSerializer.Deserialize<InProgressPullRequest>(await Db.StringGetAsync(PullRequestRedisKey));
+            if (maybePr != null)
             {
-                InProgressPullRequest pr = maybePr.Value;
+                InProgressPullRequest pr = maybePr;
                 if (string.IsNullOrEmpty(pr.Url))
                 {
                     // somehow a bad PR got in the collection, remove it
-                    await StateManager.RemoveStateAsync(PullRequest);
+                    await Db.KeyDeleteAsync(PullRequestRedisKey);
                     return (null, false);
                 }
 
@@ -372,7 +388,6 @@ namespace SubscriptionActorService
                     // need to periodically run the synchronization any longer.
                     case SynchronizePullRequestResult.Completed:
                     case SynchronizePullRequestResult.UnknownPR:
-                        await Reminders.TryUnregisterReminderAsync(PullRequestCheck);
                         return (null, false);
                     case SynchronizePullRequestResult.InProgressCanUpdate:
                         return (pr, true);
@@ -390,7 +405,6 @@ namespace SubscriptionActorService
                 }
             }
 
-            await Reminders.TryUnregisterReminderAsync(PullRequestCheck);
             return (null, false);
         }
 
@@ -405,9 +419,9 @@ namespace SubscriptionActorService
         private async Task<ActionResult<SynchronizePullRequestResult>> SynchronizePullRequestAsync(string prUrl)
         {
             Logger.LogInformation($"Synchronizing Pull Request {prUrl}");
-            ConditionalValue<InProgressPullRequest> maybePr =
-                await StateManager.TryGetStateAsync<InProgressPullRequest>(PullRequest);
-            if (!maybePr.HasValue || maybePr.Value.Url != prUrl)
+            var maybePr =
+                JsonSerializer.Deserialize<InProgressPullRequest>(await Db.StringGetAsync(PullRequestRedisKey));
+            if (maybePr == null || maybePr.Url != prUrl)
             {
                 Logger.LogInformation($"Not Applicable: Pull Request '{prUrl}' is not tracked by maestro anymore.");
                 return ActionResult.Create(
@@ -418,7 +432,7 @@ namespace SubscriptionActorService
             (string targetRepository, _) = await GetTargetAsync();
             IRemote darc = await DarcRemoteFactory.GetRemoteAsync(targetRepository, Logger);
 
-            InProgressPullRequest pr = maybePr.Value;
+            InProgressPullRequest pr = maybePr;
 
             Logger.LogInformation($"Get status for PullRequest: {prUrl}");
             PrStatus status = await darc.GetPullRequestStatusAsync(prUrl);
@@ -441,7 +455,7 @@ namespace SubscriptionActorService
                                 DependencyFlowEventReason.AutomaticallyMerged,
                                 checkPolicyResult.Result,
                                 prUrl);
-                            await StateManager.RemoveStateAsync(PullRequest);
+                            await Db.KeyDeleteAsync(PullRequestRedisKey);
                             return ActionResult.Create(SynchronizePullRequestResult.Completed, checkPolicyResult.Message);
                         case MergePolicyCheckResult.FailedPolicies:
                             await TagSourceRepositoryGitHubContactsIfPossibleAsync(pr);
@@ -473,7 +487,7 @@ namespace SubscriptionActorService
                         reason,
                         pr.MergePolicyResult,
                         prUrl);
-                    await StateManager.RemoveStateAsync(PullRequest);
+                    await Db.KeyDeleteAsync(PullRequestRedisKey);
 
                     // Also try to clean up the PR branch.
                     try
@@ -568,9 +582,7 @@ namespace SubscriptionActorService
                 if (!await actor.UpdateForMergedPullRequestAsync(update.BuildId))
                 {
                     Logger.LogInformation($"Failed to update subscription {update.SubscriptionId} for merged PR.");
-                    await Reminders.TryUnregisterReminderAsync(PullRequestCheck);
-                    await Reminders.TryUnregisterReminderAsync(PullRequestUpdate);
-                    await StateManager.TryRemoveStateAsync(PullRequest);
+                    await Db.KeyDeleteAsync(PullRequestRedisKey);
                 }
             }
         }
@@ -635,19 +647,19 @@ namespace SubscriptionActorService
             {
                 if (pr != null && !canUpdate)
                 {
-                    await StateManager.AddOrUpdateStateAsync(
-                        PullRequestUpdate,
-                        new List<UpdateAssetsParameters> { updateParameter },
-                        (n, old) =>
-                        {
-                            old.Add(updateParameter);
-                            return old;
-                        });
-                    await Reminders.TryRegisterReminderAsync(
-                        PullRequestUpdate,
-                        Array.Empty<byte>(),
-                        TimeSpan.FromMinutes(5),
-                        TimeSpan.FromMinutes(5));
+                    var updateAssetsParametersList =
+                        JsonSerializer.Deserialize<List<UpdateAssetsParameters>>(await Db.StringGetAsync(PullRequestUpdateRedisKey));
+                    if (updateAssetsParametersList != null )
+                    {
+                        updateAssetsParametersList.Add(updateParameter);
+                        await Db.StringSetAsync(PullRequestUpdateRedisKey, JsonSerializer.Serialize(updateAssetsParametersList));
+                    }
+                    else
+                    {
+                        await Db.StringSetAsync(
+                            PullRequestUpdateRedisKey,
+                            JsonSerializer.Serialize(new List<UpdateAssetsParameters> { updateParameter }));
+                    }
                     return ActionResult.Create<object>(
                         null,
                         $"Current Pull request '{pr.Url}' cannot be updated, update queued.");
@@ -802,13 +814,8 @@ namespace SubscriptionActorService
                         MergePolicyCheckResult.PendingPolicies,
                         prUrl);
 
-                    await StateManager.SetStateAsync(PullRequest, inProgressPr);
-                    await StateManager.SaveStateAsync();
-                    await Reminders.TryRegisterReminderAsync(
-                        PullRequestCheck,
-                        null,
-                        TimeSpan.FromMinutes(5),
-                        TimeSpan.FromMinutes(5));
+
+                    await Db.StringSetAsync(PullRequest + SubscriptionId, JsonSerializer.Serialize(inProgressPr));
                     return prUrl;
                 }
 
@@ -1016,13 +1023,7 @@ namespace SubscriptionActorService
             pullRequest.Title = await ComputePullRequestTitleAsync(pr, targetBranch);
             await darcRemote.UpdatePullRequestAsync(pr.Url, pullRequest);
 
-            await StateManager.SetStateAsync(PullRequest, pr);
-            await StateManager.SaveStateAsync();
-            await Reminders.TryRegisterReminderAsync(
-                PullRequestCheck,
-                null,
-                TimeSpan.FromMinutes(5),
-                TimeSpan.FromMinutes(5));
+            await Db.StringSetAsync(PullRequest + SubscriptionId, JsonSerializer.Serialize(pr));
         }
 
 
@@ -1256,7 +1257,8 @@ namespace SubscriptionActorService
             ILoggerFactory loggerFactory,
             IActionRunner actionRunner,
             IActorProxyFactory<ISubscriptionActor> subscriptionActorFactory,
-            IPullRequestPolicyFailureNotifier pullRequestPolicyFailureNotifier) : base(
+            IPullRequestPolicyFailureNotifier pullRequestPolicyFailureNotifier,
+            IConnectionMultiplexer redis) : base(
             id,
             reminders,
             stateManager,
@@ -1265,22 +1267,21 @@ namespace SubscriptionActorService
             darcFactory,
             loggerFactory,
             actionRunner,
-            subscriptionActorFactory)
+            subscriptionActorFactory,
+            redis)
         {
             _lazySubscription = new Lazy<Task<Subscription>>(RetrieveSubscription);
             _pullRequestPolicyFailureNotifier = pullRequestPolicyFailureNotifier;
         }
 
-        public Guid SubscriptionId => Id.GetGuidId();
+        //public Guid SubscriptionId => Id.GetGuidId();
 
         private async Task<Subscription> RetrieveSubscription()
         {
             Subscription subscription = await Context.Subscriptions.FindAsync(SubscriptionId);
             if (subscription == null)
             {
-                await Reminders.TryUnregisterReminderAsync(PullRequestCheck);
-                await Reminders.TryUnregisterReminderAsync(PullRequestUpdate);
-                await StateManager.TryRemoveStateAsync(PullRequest);
+                await Db.KeyDeleteAsync(PullRequestRedisKey);
 
                 throw new SubscriptionException($"Subscription '{SubscriptionId}' was not found...");
             }
@@ -1337,7 +1338,8 @@ namespace SubscriptionActorService
             IRemoteFactory darcFactory,
             ILoggerFactory loggerFactory,
             IActionRunner actionRunner,
-            IActorProxyFactory<ISubscriptionActor> subscriptionActorFactory)
+            IActorProxyFactory<ISubscriptionActor> subscriptionActorFactory,
+            IConnectionMultiplexer redis)
             :
             base(
             id,
@@ -1348,7 +1350,8 @@ namespace SubscriptionActorService
             darcFactory,
             loggerFactory,
             actionRunner,
-            subscriptionActorFactory)
+            subscriptionActorFactory,
+            redis)
         {
         }
 

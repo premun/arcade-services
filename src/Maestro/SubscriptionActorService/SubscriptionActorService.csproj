@@ -29,6 +29,7 @@
     <PackageReference Include="Microsoft.DncEng.Configuration.Extensions" />
     <PackageReference Include="Microsoft.DotNet.ServiceFabric.ServiceHost" />
     <PackageReference Include="Microsoft.DotNet.GitHub.Authentication" />
+    <PackageReference Include="NRedisStack" />
   </ItemGroup>
 
   <ItemGroup>

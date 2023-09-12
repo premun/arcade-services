@@ -4,6 +4,8 @@
 using Maestro.ContainerApp;
 using Maestro.Data;
 using Microsoft.Extensions.Logging.Console;
+using Microsoft.Extensions.Azure;
+using StackExchange.Redis;
 using Maestro.ContainerApp.Queues;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,6 +29,8 @@ builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
 {
     options.UseSqlServer(connectionString);
 });
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect("localhost:6379"));
 
 var app = builder.Build();
 

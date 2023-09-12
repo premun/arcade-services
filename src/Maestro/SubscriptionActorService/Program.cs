@@ -14,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Octokit;
+using StackExchange.Redis;
 
 namespace SubscriptionActorService;
 
@@ -71,6 +72,7 @@ public static class Program
                 o.Tokens.Add(token.GetValue<string>("Account"), token.GetValue<string>("Token"));
             }
         });
+        services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect("localhost:6379"));
 
         services.AddMergePolicies();
     }
