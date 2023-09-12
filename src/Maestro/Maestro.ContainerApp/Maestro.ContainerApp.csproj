@@ -8,13 +8,24 @@
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <DockerfileContext>..\..\..</DockerfileContext>
     <DockerComposeProjectPath>..\docker-compose\docker-compose.dcproj</DockerComposeProjectPath>
+    <DelaySign>True</DelaySign>
+    <SignAssembly>False</SignAssembly>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Azure.Storage.Queues" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.Extensions.Azure" />
+    <PackageReference Include="Microsoft.AspNetCore.ApiPagination" />
+    <PackageReference Include="Microsoft.AspNetCore.ApiVersioning" />
+    <!-- <PackageReference Include="Microsoft.AspNetCore.ApiVersioning.Swashbuckle" /> -->
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
     <PackageReference Include="NRedisStack" />
-  </ItemGroup></Project>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Maestro.Data\Maestro.Data.csproj" />
+  </ItemGroup>
+
+</Project>
