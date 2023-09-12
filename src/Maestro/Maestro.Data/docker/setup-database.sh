@@ -5,6 +5,6 @@ echo 'starting database setup'
 sleep 10s
 
 echo 'Initializing database after 10 seconds of wait'
-/opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P ProdCon123 -i BuildAssetRegistry.sql
+/opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P '$SA_PASSWORD' -i BuildAssetRegistry.sql
 
 echo 'Finished initializing the database'
