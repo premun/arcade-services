@@ -313,7 +313,6 @@ namespace SubscriptionActorService
             if (updates == null || updates.Count < 1)
             {
                 Logger.LogInformation("No Pending Updates");
-                await Reminders.TryUnregisterReminderAsync(PullRequestUpdate);
                 return ActionResult.Create(false, "No Pending Updates");
             }
 
@@ -347,7 +346,6 @@ namespace SubscriptionActorService
             }
 
             await Db.KeyDeleteAsync(PullRequestUpdate + SubscriptionId);
-            await Reminders.TryUnregisterReminderAsync(PullRequestUpdate);
 
             return ActionResult.Create(true, "Pending updates applied. " + result);
         }
@@ -390,7 +388,6 @@ namespace SubscriptionActorService
                     // need to periodically run the synchronization any longer.
                     case SynchronizePullRequestResult.Completed:
                     case SynchronizePullRequestResult.UnknownPR:
-                        await Reminders.TryUnregisterReminderAsync(PullRequestCheck);
                         return (null, false);
                     case SynchronizePullRequestResult.InProgressCanUpdate:
                         return (pr, true);
@@ -408,7 +405,6 @@ namespace SubscriptionActorService
                 }
             }
 
-            await Reminders.TryUnregisterReminderAsync(PullRequestCheck);
             return (null, false);
         }
 
@@ -586,8 +582,6 @@ namespace SubscriptionActorService
                 if (!await actor.UpdateForMergedPullRequestAsync(update.BuildId))
                 {
                     Logger.LogInformation($"Failed to update subscription {update.SubscriptionId} for merged PR.");
-                    await Reminders.TryUnregisterReminderAsync(PullRequestCheck);
-                    await Reminders.TryUnregisterReminderAsync(PullRequestUpdate);
                     await Db.KeyDeleteAsync(PullRequestRedisKey);
                 }
             }
@@ -666,11 +660,6 @@ namespace SubscriptionActorService
                             PullRequestUpdateRedisKey,
                             JsonSerializer.Serialize(new List<UpdateAssetsParameters> { updateParameter }));
                     }
-                    await Reminders.TryRegisterReminderAsync(
-                        PullRequestUpdate,
-                        Array.Empty<byte>(),
-                        TimeSpan.FromMinutes(5),
-                        TimeSpan.FromMinutes(5));
                     return ActionResult.Create<object>(
                         null,
                         $"Current Pull request '{pr.Url}' cannot be updated, update queued.");
@@ -827,11 +816,6 @@ namespace SubscriptionActorService
 
 
                     await Db.StringSetAsync(PullRequest + SubscriptionId, JsonSerializer.Serialize(inProgressPr));
-                    await Reminders.TryRegisterReminderAsync(
-                        PullRequestCheck,
-                        null,
-                        TimeSpan.FromMinutes(5),
-                        TimeSpan.FromMinutes(5));
                     return prUrl;
                 }
 
@@ -1040,11 +1024,6 @@ namespace SubscriptionActorService
             await darcRemote.UpdatePullRequestAsync(pr.Url, pullRequest);
 
             await Db.StringSetAsync(PullRequest + SubscriptionId, JsonSerializer.Serialize(pr));
-            await Reminders.TryRegisterReminderAsync(
-                PullRequestCheck,
-                null,
-                TimeSpan.FromMinutes(5),
-                TimeSpan.FromMinutes(5));
         }
 
 
@@ -1302,8 +1281,6 @@ namespace SubscriptionActorService
             Subscription subscription = await Context.Subscriptions.FindAsync(SubscriptionId);
             if (subscription == null)
             {
-                await Reminders.TryUnregisterReminderAsync(PullRequestCheck);
-                await Reminders.TryUnregisterReminderAsync(PullRequestUpdate);
                 await Db.KeyDeleteAsync(PullRequestRedisKey);
 
                 throw new SubscriptionException($"Subscription '{SubscriptionId}' was not found...");
