@@ -10,18 +10,17 @@ internal static class QueueConfiguration
 {
     public const string SubscriptionTriggerQueueName = "subscriptions";
 
-    public static void AddAzureQueues(this IServiceCollection services)
+    public static void AddAzureQueues(this WebApplicationBuilder builder)
     {
-        services.AddAzureClients(clientBuilder =>
+        builder.Services.AddAzureClients(clientBuilder =>
         {
-            // TODO: This would get replaced with a connection string from builder.Configuration["StorageConnectionString:queue"]
-            clientBuilder.AddQueueServiceClient("UseDevelopmentStorage=true;DevelopmentStorageProxyUri=http://host.docker.internal");
+            clientBuilder.AddQueueServiceClient(builder.Configuration.GetSection("ConnectionStrings")["AzureQueues"]);
             clientBuilder.ConfigureDefaults(options =>
             {
                 options.Diagnostics.IsLoggingEnabled = false;
             });
         });
 
-        services.TryAddTransient<QueueProducerFactory>();
+        builder.Services.TryAddTransient<QueueProducerFactory>();
     }
 }

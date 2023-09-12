@@ -17,7 +17,7 @@ builder.Services.AddLogging(b =>
      .AddConsoleFormatter<SimpleConsoleLoggerFormatter, SimpleConsoleFormatterOptions>(
         options => options.TimestampFormat = "[HH:mm:ss] "));
 
-builder.Services.AddAzureQueues();
+builder.AddAzureQueues();
 builder.Services.AddHostedService<QueueProcessor>();
 builder.Services.AddTransient<SubscriptionQueueProcessor>();
 
