@@ -22,7 +22,7 @@ public class AssetsControllers : Controller
     /// </summary>
     [HttpGet("darc-version")]
     [SwaggerApiResponse(HttpStatusCode.OK, Type = typeof(string), Description = "Gets the version of darc in use by this Maestro++ instance.")]
-    // TODO: check hat this attribute does and if it's needed
+    // TODO: check what this attribute does and if it's needed
     //[ValidateModelState]
     [AllowAnonymous]
     public IActionResult GetDarcVersion()
