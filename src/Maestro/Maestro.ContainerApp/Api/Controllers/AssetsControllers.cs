@@ -1,9 +1,9 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Net;
 using System.Reflection;
-using Microsoft.AspNetCore.ApiVersioning.Swashbuckle;
+using Maestro.ContainerApp.Api.Models;
+using Maestro.ContainerApp.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.DotNet.DarcLib;
@@ -21,9 +21,8 @@ public class AssetsControllers : Controller
     ///   Gets the version of Darc in use by this deployment of Maestro.
     /// </summary>
     [HttpGet("darc-version")]
-    [SwaggerApiResponse(HttpStatusCode.OK, Type = typeof(string), Description = "Gets the version of darc in use by this Maestro++ instance.")]
-    // TODO: check what this attribute does and if it's needed
-    //[ValidateModelState]
+    //[SwaggerApiResponse(HttpStatusCode.OK, Type = typeof(string), Description = "Gets the version of darc in use by this Maestro++ instance.")]
+    [ValidateModelState]
     [AllowAnonymous]
     public IActionResult GetDarcVersion()
     {
