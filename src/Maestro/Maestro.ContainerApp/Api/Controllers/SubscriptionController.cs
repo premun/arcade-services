@@ -12,6 +12,8 @@ using Microsoft.AspNetCore.ApiVersioning;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.DotNet.GitHub.Authentication;
+using StackExchange.Redis;
+using Maestro.ContainerApp.Actors;
 
 namespace Maestro.ContainerApp.Api.Controllers;
 
@@ -27,15 +29,18 @@ public class SubscriptionsController : Controller
     private BuildAssetRegistryContext DBContext { get; }
     private QueueProducerFactory Queue { get; }
     private IGitHubClientFactory GitHubClientFactory { get; }
+    private IConnectionMultiplexer Redis { get; }
 
     public SubscriptionsController(
         BuildAssetRegistryContext context,
         QueueProducerFactory queue,
-        IGitHubClientFactory gitHubClientFactory)
+        IGitHubClientFactory gitHubClientFactory,
+        IConnectionMultiplexer redis)
     {
         DBContext = context;
         Queue = queue;
         GitHubClientFactory = gitHubClientFactory;
+        Redis = redis;
     }
 
     /// <summary>
@@ -48,38 +53,43 @@ public class SubscriptionsController : Controller
     [HttpGet]
     //[SwaggerApiResponse(HttpStatusCode.OK, Type = typeof(List<Subscription>), Description = "The list of Subscriptions")]
     [ValidateModelState]
-    public IActionResult ListSubscriptions(
+    public async Task<IActionResult> ListSubscriptions(
         string? sourceRepository = null,
         string? targetRepository = null,
         int? channelId = null,
         bool? enabled = null)
     {
-        IQueryable<Data.Models.Subscription> query = DBContext.Subscriptions
-            .Include(s => s.Channel)
-            .Include(s => s.LastAppliedBuild);
+        var reminders = new ReminderManager(Queue, Redis);
+        await reminders.TryRegisterReminderAsync("testReminder", TimeSpan.FromMinutes(1));
 
-        if (!string.IsNullOrEmpty(sourceRepository))
-        {
-            query = query.Where(sub => sub.SourceRepository == sourceRepository);
-        }
+        return Ok();
 
-        if (!string.IsNullOrEmpty(targetRepository))
-        {
-            query = query.Where(sub => sub.TargetRepository == targetRepository);
-        }
+        //IQueryable<Data.Models.Subscription> query = DBContext.Subscriptions
+        //    .Include(s => s.Channel)
+        //    .Include(s => s.LastAppliedBuild);
 
-        if (channelId.HasValue)
-        {
-            query = query.Where(sub => sub.ChannelId == channelId.Value);
-        }
+        //if (!string.IsNullOrEmpty(sourceRepository))
+        //{
+        //    query = query.Where(sub => sub.SourceRepository == sourceRepository);
+        //}
 
-        if (enabled.HasValue)
-        {
-            query = query.Where(sub => sub.Enabled == enabled.Value);
-        }
+        //if (!string.IsNullOrEmpty(targetRepository))
+        //{
+        //    query = query.Where(sub => sub.TargetRepository == targetRepository);
+        //}
 
-        List<Subscription> results = query.AsEnumerable().Select(sub => new Subscription(sub)).ToList();
-        return Ok(results);
+        //if (channelId.HasValue)
+        //{
+        //    query = query.Where(sub => sub.ChannelId == channelId.Value);
+        //}
+
+        //if (enabled.HasValue)
+        //{
+        //    query = query.Where(sub => sub.Enabled == enabled.Value);
+        //}
+
+        //List<Subscription> results = query.AsEnumerable().Select(sub => new Subscription(sub)).ToList();
+        //return Ok(results);
     }
 
     /// <summary>
