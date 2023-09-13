@@ -89,39 +89,84 @@ namespace Maestro.ContainerApp.Actors
             await Context.SaveChangesAsync();
         }
 
-        public Task UpdateAssetsAsync(Guid subscriptionId, int buildId, string sourceRepo, string sourceSha, List<Asset> assets)
-        {
-            return RunUpdateAssetsAsync(subscriptionId, buildId, sourceRepo, sourceSha, assets);
-        }
-
-        public Task ProcessPendingUpdatesAsync()
-        {
-            return RunProcessPendingUpdatesAsync();
-        }
-
-        protected abstract Task<(string repository, string branch)> GetTargetAsync();
-
-        protected abstract Task<IReadOnlyList<MergePolicyDefinition>> GetMergePolicyDefinitions();
-
-        private class ReferenceLinksMap
-        {
-            public Dictionary<(string from, string to), int> ShaRangeToLinkId { get; } = new Dictionary<(string from, string to), int>();
-        }
-
-        private async Task<string> GetSourceRepositoryAsync(Guid subscriptionId)
-        {
-            Subscription subscription = await Context.Subscriptions.FindAsync(subscriptionId);
-            return subscription?.SourceRepository;
-        }
-
         /// <summary>
-        /// Retrieve the build from a database build id.
+        ///     Applies or queues asset updates for the target repository and branch from the given build and list of assets.
         /// </summary>
-        /// <param name="buildId">Build id</param>
-        /// <returns>Build</returns>
-        private Task<Build> GetBuildAsync(int buildId)
+        /// <param name="subscriptionId">The id of the subscription the update comes from</param>
+        /// <param name="buildId">The build that the updated assets came from</param>
+        /// <param name="sourceSha">The commit hash that built the assets</param>
+        /// <param name="assets">The list of assets</param>
+        /// <remarks>
+        ///     This function will queue updates if there is a pull request and it is currently not-updateable.
+        ///     A pull request is considered "not-updateable" based on merge policies.
+        ///     If at least one merge policy calls <see cref="IMergePolicyEvaluationContext.Pending" /> and
+        ///     no merge policy calls <see cref="IMergePolicyEvaluationContext.Fail" /> then the pull request is considered
+        ///     not-updateable.
+        ///
+        ///     PRs are marked as non-updateable so that we can allow pull request checks to complete on a PR prior
+        ///     to pushing additional commits.
+        /// </remarks>
+        /// <returns></returns>
+        public async Task UpdateAssetsAsync(Guid subscriptionId, int buildId, string sourceRepo, string sourceSha, List<Asset> assets)
         {
-            return Context.Builds.FindAsync(buildId).AsTask();
+            (InProgressPullRequest pr, bool canUpdate) = await SynchronizeInProgressPullRequestAsync();
+
+            var updateParameter = new UpdateAssetsParameters
+            {
+                SubscriptionId = subscriptionId,
+                BuildId = buildId,
+                SourceSha = sourceSha,
+                SourceRepo = sourceRepo,
+                Assets = assets,
+                IsCoherencyUpdate = false
+            };
+
+            try
+            {
+                if (pr != null && !canUpdate)
+                {
+                    var updateAssetsParametersList =
+                        JsonSerializer.Deserialize<List<UpdateAssetsParameters>>(await Db.StringGetAsync(PullRequestUpdateRedisKey));
+                    if (updateAssetsParametersList != null)
+                    {
+                        updateAssetsParametersList.Add(updateParameter);
+                        await Db.StringSetAsync(PullRequestUpdateRedisKey, JsonSerializer.Serialize(updateAssetsParametersList));
+                    }
+                    else
+                    {
+                        await Db.StringSetAsync(
+                            PullRequestUpdateRedisKey,
+                            JsonSerializer.Serialize(new List<UpdateAssetsParameters> { updateParameter }));
+                    }
+                    Logger.LogInformation($"Current Pull request '{pr.Url}' cannot be updated, update queued.");
+                    return;
+                }
+
+                if (pr != null)
+                {
+                    await UpdatePullRequestAsync(pr, new List<UpdateAssetsParameters> { updateParameter });
+                    Logger.LogInformation($"Pull Request '{pr.Url}' updated.");
+                    return;
+                }
+
+                string prUrl = await CreatePullRequestAsync(new List<UpdateAssetsParameters> { updateParameter });
+                if (prUrl == null)
+                {
+                    Logger.LogInformation("Updates require no changes, no pull request created.");
+                    return;
+                }
+
+                Logger.LogInformation($"Pull request '{prUrl}' created.");
+                return;
+            }
+            catch (HttpRequestException reqEx) when (reqEx.Message.Contains(((int)HttpStatusCode.Unauthorized).ToString()))
+            {
+                // We want to preserve the HttpRequestException's information but it's not serializable
+                // We'll log the full exception object so it's in Application Insights, and strip any single quotes from the message to ensure 
+                // GitHub issues are properly created.
+                Logger.LogError(reqEx, "Failure to authenticate to repository");
+                throw new DarcAuthenticationFailureException($"Failure to authenticate: {reqEx.Message}");
+            }
         }
 
         /// <summary>
@@ -132,7 +177,7 @@ namespace Maestro.ContainerApp.Actors
         ///     An <see cref="ActionResult{bool}" /> containing:
         ///     <see langword="true" /> if updates have been applied; <see langword="false" /> otherwise.
         /// </returns>
-        private async Task RunProcessPendingUpdatesAsync()
+        public async Task ProcessPendingUpdatesAsync()
         {
             Logger.LogInformation("Processing pending updates");
             var maybeUpdates = JsonSerializer.Deserialize<List<UpdateAssetsParameters>>(await Db.StringGetAsync(PullRequestUpdateRedisKey));
@@ -176,6 +221,31 @@ namespace Maestro.ContainerApp.Actors
 
             Logger.LogInformation("Pending updates applied. " + result);
             return;
+        }
+
+        protected abstract Task<(string repository, string branch)> GetTargetAsync();
+
+        protected abstract Task<IReadOnlyList<MergePolicyDefinition>> GetMergePolicyDefinitions();
+
+        private class ReferenceLinksMap
+        {
+            public Dictionary<(string from, string to), int> ShaRangeToLinkId { get; } = new Dictionary<(string from, string to), int>();
+        }
+
+        private async Task<string> GetSourceRepositoryAsync(Guid subscriptionId)
+        {
+            Subscription subscription = await Context.Subscriptions.FindAsync(subscriptionId);
+            return subscription?.SourceRepository;
+        }
+
+        /// <summary>
+        /// Retrieve the build from a database build id.
+        /// </summary>
+        /// <param name="buildId">Build id</param>
+        /// <returns>Build</returns>
+        private Task<Build> GetBuildAsync(int buildId)
+        {
+            return Context.Builds.FindAsync(buildId).AsTask();
         }
 
         protected virtual Task TagSourceRepositoryGitHubContactsIfPossibleAsync(InProgressPullRequest pr)
@@ -426,91 +496,6 @@ namespace Maestro.ContainerApp.Actors
                 {
                     Logger.LogInformation($"Failed to add dependency flow event for {update.SubscriptionId}.");
                 }
-            }
-        }
-
-        /// <summary>
-        ///     Applies or queues asset updates for the target repository and branch from the given build and list of assets.
-        /// </summary>
-        /// <param name="subscriptionId">The id of the subscription the update comes from</param>
-        /// <param name="buildId">The build that the updated assets came from</param>
-        /// <param name="sourceSha">The commit hash that built the assets</param>
-        /// <param name="assets">The list of assets</param>
-        /// <remarks>
-        ///     This function will queue updates if there is a pull request and it is currently not-updateable.
-        ///     A pull request is considered "not-updateable" based on merge policies.
-        ///     If at least one merge policy calls <see cref="IMergePolicyEvaluationContext.Pending" /> and
-        ///     no merge policy calls <see cref="IMergePolicyEvaluationContext.Fail" /> then the pull request is considered
-        ///     not-updateable.
-        ///
-        ///     PRs are marked as non-updateable so that we can allow pull request checks to complete on a PR prior
-        ///     to pushing additional commits.
-        /// </remarks>
-        /// <returns></returns>
-        private async Task RunUpdateAssetsAsync(
-            Guid subscriptionId,
-            int buildId,
-            string sourceRepo,
-            string sourceSha,
-            List<Asset> assets)
-        {
-            (InProgressPullRequest pr, bool canUpdate) = await SynchronizeInProgressPullRequestAsync();
-
-            var updateParameter = new UpdateAssetsParameters
-            {
-                SubscriptionId = subscriptionId,
-                BuildId = buildId,
-                SourceSha = sourceSha,
-                SourceRepo = sourceRepo,
-                Assets = assets,
-                IsCoherencyUpdate = false
-            };
-
-            try
-            {
-                if (pr != null && !canUpdate)
-                {
-                    var updateAssetsParametersList =
-                        JsonSerializer.Deserialize<List<UpdateAssetsParameters>>(await Db.StringGetAsync(PullRequestUpdateRedisKey));
-                    if (updateAssetsParametersList != null)
-                    {
-                        updateAssetsParametersList.Add(updateParameter);
-                        await Db.StringSetAsync(PullRequestUpdateRedisKey, JsonSerializer.Serialize(updateAssetsParametersList));
-                    }
-                    else
-                    {
-                        await Db.StringSetAsync(
-                            PullRequestUpdateRedisKey,
-                            JsonSerializer.Serialize(new List<UpdateAssetsParameters> { updateParameter }));
-                    }
-                    Logger.LogInformation($"Current Pull request '{pr.Url}' cannot be updated, update queued.");
-                    return;
-                }
-
-                if (pr != null)
-                {
-                    await UpdatePullRequestAsync(pr, new List<UpdateAssetsParameters> { updateParameter });
-                    Logger.LogInformation($"Pull Request '{pr.Url}' updated.");
-                    return;
-                }
-
-                string prUrl = await CreatePullRequestAsync(new List<UpdateAssetsParameters> { updateParameter });
-                if (prUrl == null)
-                {
-                    Logger.LogInformation("Updates require no changes, no pull request created.");
-                    return;
-                }
-
-                Logger.LogInformation($"Pull request '{prUrl}' created.");
-                return;
-            }
-            catch (HttpRequestException reqEx) when (reqEx.Message.Contains(((int)HttpStatusCode.Unauthorized).ToString()))
-            {
-                // We want to preserve the HttpRequestException's information but it's not serializable
-                // We'll log the full exception object so it's in Application Insights, and strip any single quotes from the message to ensure 
-                // GitHub issues are properly created.
-                Logger.LogError(reqEx, "Failure to authenticate to repository");
-                throw new DarcAuthenticationFailureException($"Failure to authenticate: {reqEx.Message}");
             }
         }
 
