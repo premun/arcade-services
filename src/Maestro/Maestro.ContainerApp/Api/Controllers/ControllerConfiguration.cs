@@ -2,7 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Maestro.AzureDevOps;
-using Maestro.DataProviders;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.GitHub.Authentication;
 using Microsoft.DotNet.Internal.Logging;
@@ -16,25 +15,21 @@ internal static class ControllerConfiguration
 {
     public static void AddControllerConfigurations(this WebApplicationBuilder builder)
     {
-        builder.Services.AddSingleton<IGitHubClientFactory, GitHubClientFactory>();
-        builder.Services.AddScoped<IRemoteFactory, DarcRemoteFactory>();
+        builder.Services.AddTransient<IGitHubClientFactory, GitHubClientFactory>();
+        builder.Services.AddTransient<IGitHubAppTokenProvider, GitHubAppTokenProvider>();
+        builder.Services.AddTransient<IInstallationLookup, InMemoryCacheInstallationLookup>();
+        builder.Services.AddTransient<IGitHubTokenProvider, GitHubTokenProvider>();
+        builder.Services.AddTransient<IAzureDevOpsTokenProvider, AzureDevOpsTokenProvider>();
+        builder.Services.AddTransient<DarcRemoteMemoryCache>();
+        builder.Services.AddTransient<TemporaryFiles>();
+        builder.Services.AddTransient<IBarClient, MaestroBarClient>();
+        builder.Services.AddTransient<ILocalGit, LocalGit>();
+        builder.Services.AddTransient<IRemoteFactory, DarcRemoteFactory>();
         builder.Services.AddKustoClientProvider("Kusto");
         builder.Services.AddGitHubTokenProvider();
-        builder.Services.AddSingleton<ISystemClock, SystemClock>();
-        builder.Services.AddSingleton<ExponentialRetry>();
-        builder.Services.AddSingleton<IAzureDevOpsTokenProvider, AzureDevOpsTokenProvider>();
-        builder.Services.Configure<AzureDevOpsTokenProviderOptions>(
-            (options, provider) =>
-            {
-                var tokenMap = builder.Configuration.GetSection("AzureDevOps:Tokens").GetChildren();
-                foreach (IConfigurationSection token in tokenMap)
-                {
-                    options.Tokens.Add(token.GetValue<string>("Account"), token.GetValue<string>("Token"));
-                }
-            });
+        builder.Services.AddTransient<ISystemClock, SystemClock>();
+        builder.Services.AddTransient<ExponentialRetry>();
         builder.Services.AddTransient<IVersionDetailsParser, VersionDetailsParser>();
-        builder.Services.AddSingleton<DarcRemoteMemoryCache>();
-        builder.Services.AddSingleton<OperationManager>();
-        builder.Services.Configure<OperationManagerOptions>(_ => new OperationManagerOptions());
+        builder.Services.AddTransient<OperationManager>();
     }
 }
