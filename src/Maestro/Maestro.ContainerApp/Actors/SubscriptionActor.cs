@@ -13,28 +13,26 @@ namespace Maestro.ContainerApp.Actors;
 
 public class SubscriptionActor : ISubscriptionActor
 {
+    private readonly BuildAssetRegistryContext _context;
+    private readonly ILogger<SubscriptionActor> _logger;
+    private readonly IActorFactory _actorFactory;
+    private readonly Guid _subscriptionId;
+
     public SubscriptionActor(
         BuildAssetRegistryContext context,
         ILogger<SubscriptionActor> logger,
         IActorFactory actorFactory,
         Guid subscriptionId)
     {
-        Context = context;
-        Logger = logger;
-        ActorFactory = actorFactory;
-        SubscriptionId = subscriptionId;
+        _context = context;
+        _logger = logger;
+        _actorFactory = actorFactory;
+        _subscriptionId = subscriptionId;
     }
-
-    public BuildAssetRegistryContext Context { get; }
-    public ILogger<SubscriptionActor> Logger { get; }
-
-    public IActorFactory ActorFactory { get; }
-
-    public Guid SubscriptionId { get; }
 
     public async Task UpdateAsync(int buildId)
     {
-        Subscription? subscription = await Context.Subscriptions.FindAsync(SubscriptionId);
+        Subscription? subscription = await _context.Subscriptions.FindAsync(_subscriptionId);
 
         await AddDependencyFlowEventAsync(
             buildId,
@@ -44,9 +42,9 @@ public class SubscriptionActor : ISubscriptionActor
             "PR",
             null);
 
-        Logger.LogInformation($"Looking up build {buildId}");
+        _logger.LogInformation($"Looking up build {buildId}");
 
-        Build build = await Context.Builds.Include(b => b.Assets)
+        Build build = await _context.Builds.Include(b => b.Assets)
             .ThenInclude(a => a.Locations)
             .FirstAsync(b => b.Id == buildId);
 
@@ -60,12 +58,12 @@ public class SubscriptionActor : ISubscriptionActor
         }
         else
         {
-            pullRequestActorId = new PullRequestActorId(SubscriptionId);
+            pullRequestActorId = new PullRequestActorId(_subscriptionId);
         }
 
-        Logger.LogInformation($"Creating pull request actor for '{pullRequestActorId}'");
+        _logger.LogInformation($"Creating pull request actor for '{pullRequestActorId}'");
 
-        IPullRequestActor pullRequestActor = await ActorFactory.CreatePullRequestActor(SubscriptionId);
+        IPullRequestActor pullRequestActor = await _actorFactory.CreatePullRequestActor(_subscriptionId);
 
         List<Asset> assets = build.Assets.Select(
                 a => new Asset
@@ -75,34 +73,34 @@ public class SubscriptionActor : ISubscriptionActor
                 })
             .ToList();
 
-        Logger.LogInformation($"Running asset update for {SubscriptionId}");
+        _logger.LogInformation($"Running asset update for {_subscriptionId}");
 
         await pullRequestActor.UpdateAssetsAsync(
-            SubscriptionId,
+            _subscriptionId,
             build.Id,
             build.GitHubRepository ?? build.AzureDevOpsRepository,
             build.Commit,
             assets);
 
-        Logger.LogInformation($"Asset update complete for {SubscriptionId}");
+        _logger.LogInformation($"Asset update complete for {_subscriptionId}");
         return;
     }
 
     public async Task<bool> UpdateForMergedPullRequestAsync(int updateBuildId)
     {
-        Logger.LogInformation($"Updating {SubscriptionId} with latest build id {updateBuildId}");
-        Subscription? subscription = await Context.Subscriptions.FindAsync(SubscriptionId);
+        _logger.LogInformation($"Updating {_subscriptionId} with latest build id {updateBuildId}");
+        Subscription? subscription = await _context.Subscriptions.FindAsync(_subscriptionId);
         
         if (subscription != null)
         {
             subscription.LastAppliedBuildId = updateBuildId;
-            Context.Subscriptions.Update(subscription);
-            await Context.SaveChangesAsync();
+            _context.Subscriptions.Update(subscription);
+            await _context.SaveChangesAsync();
             return true;
         }
         else
         {
-            Logger.LogInformation($"Could not find subscription with ID {SubscriptionId}. Skipping latestBuild update.");
+            _logger.LogInformation($"Could not find subscription with ID {_subscriptionId}. Skipping latestBuild update.");
             return false;
         }
     }
@@ -119,8 +117,8 @@ public class SubscriptionActor : ISubscriptionActor
                               reason == DependencyFlowEventReason.AutomaticallyMerged ? 
                              reason.ToString() : $"{reason.ToString()}{policy.ToString()}";
 
-        Logger.LogInformation($"Adding dependency flow event for {SubscriptionId} with {flowEvent} {updateReason} {flowType}");
-        Subscription? subscription = await Context.Subscriptions.FindAsync(SubscriptionId);
+        _logger.LogInformation($"Adding dependency flow event for {_subscriptionId} with {flowEvent} {updateReason} {flowType}");
+        Subscription? subscription = await _context.Subscriptions.FindAsync(_subscriptionId);
         if (subscription != null)
         {
             DependencyFlowEvent dfe = new DependencyFlowEvent { 
@@ -134,28 +132,28 @@ public class SubscriptionActor : ISubscriptionActor
                     FlowType = flowType,
                     Url = url
                     };
-            Context.DependencyFlowEvents.Add(dfe);
-            await Context.SaveChangesAsync();
+            _context.DependencyFlowEvents.Add(dfe);
+            await _context.SaveChangesAsync();
             return true;
         }
         else
         {
-            Logger.LogInformation($"Could not find subscription with ID {SubscriptionId}. Skipping adding dependency flow event.");
+            _logger.LogInformation($"Could not find subscription with ID {_subscriptionId}. Skipping adding dependency flow event.");
             return false;
         }
     }
 
     private async Task<SubscriptionUpdate> GetSubscriptionUpdate()
     {
-        SubscriptionUpdate? subscriptionUpdate = await Context.SubscriptionUpdates.FindAsync(SubscriptionId);
+        SubscriptionUpdate? subscriptionUpdate = await _context.SubscriptionUpdates.FindAsync(_subscriptionId);
         if (subscriptionUpdate == null)
         {
-            Context.SubscriptionUpdates.Add(
-                subscriptionUpdate = new SubscriptionUpdate {SubscriptionId = SubscriptionId});
+            _context.SubscriptionUpdates.Add(
+                subscriptionUpdate = new SubscriptionUpdate {SubscriptionId = _subscriptionId});
         }
         else
         {
-            Context.SubscriptionUpdates.Update(subscriptionUpdate);
+            _context.SubscriptionUpdates.Update(subscriptionUpdate);
         }
 
         return subscriptionUpdate;
