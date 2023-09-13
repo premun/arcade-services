@@ -1,6 +1,7 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using Maestro.ContainerApp.Utils;
 using Microsoft.Extensions.Azure;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -12,7 +13,7 @@ internal static class QueueConfiguration
     {
         builder.Services.AddAzureClients(clientBuilder =>
         {
-            var configSection = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true"
+            var configSection = DockerHelpers.IsDocker
                 ? builder.Configuration.GetSection("ConnectionStrings")
                 : builder.Configuration.GetSection("ConnectionStringsNonDocker");
 
