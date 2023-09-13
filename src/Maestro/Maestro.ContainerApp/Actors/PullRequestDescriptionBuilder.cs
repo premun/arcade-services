@@ -10,7 +10,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using static Maestro.ContainerApp.Actors.PullRequestActorImplementation;
+using static Maestro.ContainerApp.Actors.PullRequestActor;
 
 namespace Maestro.ContainerApp.Actors;
 

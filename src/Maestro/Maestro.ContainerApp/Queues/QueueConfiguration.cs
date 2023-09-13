@@ -13,11 +13,7 @@ internal static class QueueConfiguration
     {
         builder.Services.AddAzureClients(clientBuilder =>
         {
-            var configSection = DockerHelpers.IsDocker
-                ? builder.Configuration.GetSection("ConnectionStrings")
-                : builder.Configuration.GetSection("ConnectionStringsNonDocker");
-
-            clientBuilder.AddQueueServiceClient(configSection["AzureQueues"]);
+            clientBuilder.AddQueueServiceClient(builder.GetConnectionString("AzureQueues"));
             clientBuilder.ConfigureDefaults(options =>
             {
                 options.Diagnostics.IsLoggingEnabled = false;
@@ -28,7 +24,7 @@ internal static class QueueConfiguration
             ?? throw new ArgumentException("Please configure the BackgroundQueueName setting");
 
         builder.Services.AddHostedService(sp
-            => ActivatorUtilities.CreateInstance<BackgroundQueueProcessor>(sp, backgroundQueueName));
+            => ActivatorUtilities.CreateInstance<BackgroundQueueListener>(sp, backgroundQueueName));
         builder.Services.TryAddTransient(sp
             => ActivatorUtilities.CreateInstance<QueueProducerFactory>(sp, backgroundQueueName));
     }
