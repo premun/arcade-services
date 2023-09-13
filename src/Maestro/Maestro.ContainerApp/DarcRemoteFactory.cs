@@ -1,19 +1,15 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System;
-using System.Threading.Tasks;
+
 using Maestro.AzureDevOps;
 using Maestro.Data;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.DarcLib.Helpers;
 using Microsoft.DotNet.GitHub.Authentication;
 using Microsoft.DotNet.Internal.Logging;
-using Microsoft.DotNet.ServiceFabric.ServiceHost;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 
-namespace SubscriptionActorService;
+namespace Maestro.ContainerApp;
 
 public class DarcRemoteFactory : IRemoteFactory
 {
@@ -66,7 +62,7 @@ public class DarcRemoteFactory : IRemoteFactory
             Uri normalizedRepoUri = new Uri(normalizedUrl);
             // Look up the setting for where the repo root should be held.  Default to empty,
             // which will use the temp directory.
-            string temporaryRepositoryRoot = _configuration.GetValue<string>("DarcTemporaryRepoRoot", null);
+            string? temporaryRepositoryRoot = _configuration.GetValue<string?>("DarcTemporaryRepoRoot", null);
             if (string.IsNullOrEmpty(temporaryRepositoryRoot))
             {
                 temporaryRepositoryRoot = _tempFiles.GetFilePath("repos");

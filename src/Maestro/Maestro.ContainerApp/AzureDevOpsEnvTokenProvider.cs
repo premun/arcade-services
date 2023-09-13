@@ -10,14 +10,13 @@ public class AzureDevOpsEnvTokenProvider : IAzureDevOpsTokenProvider
     // one token returned for all accounts
     public Task<string> GetTokenForAccount(string account)
     {
-        const string TOKEN_VAR_NAME = "HACKATHON-AZDO-TOKEN";
         return Task.Run(
             () =>
             {
-                string? token = Environment.GetEnvironmentVariable(TOKEN_VAR_NAME);
+                string? token = Environment.GetEnvironmentVariable(EnvironmentVariables.AZDO_TOKEN_ENV_VAR_NAME);
                 if (token == null)
                 {
-                    throw new Exception($"Environment variable '{TOKEN_VAR_NAME}' not defined.");
+                    throw new Exception($"Environment variable '{EnvironmentVariables.AZDO_TOKEN_ENV_VAR_NAME}' not defined.");
                 }
                 return token;
             }

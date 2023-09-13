@@ -6,14 +6,10 @@ using Maestro.ContainerApp.Actors;
 using Maestro.ContainerApp.Queues;
 using Maestro.ContainerApp.Utils;
 using Maestro.Data;
+using Microsoft.DotNet.DarcLib;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Console;
 using StackExchange.Redis;
-using Maestro.ContainerApp.Queues;
-using Microsoft.EntityFrameworkCore;
-using Maestro.ContainerApp.Utils;
-using Microsoft.DotNet.DarcLib;
-using SubscriptionActorService;
 
 var builder = WebApplication.CreateBuilder(args);
 
