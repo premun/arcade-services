@@ -25,11 +25,11 @@ internal static class ControllerConfiguration
         builder.Services.AddTransient<IBarClient, MaestroBarClient>();
         builder.Services.AddTransient<ILocalGit, LocalGit>();
         builder.Services.AddTransient<IRemoteFactory, DarcRemoteFactory>();
-        builder.Services.AddKustoClientProvider("Kusto");
-        builder.Services.AddGitHubTokenProvider();
         builder.Services.AddTransient<ISystemClock, SystemClock>();
         builder.Services.AddTransient<ExponentialRetry>();
         builder.Services.AddTransient<IVersionDetailsParser, VersionDetailsParser>();
         builder.Services.AddTransient<OperationManager>();
+        builder.Services.AddKustoClientProvider("Kusto");
+        builder.Services.AddGitHubTokenProvider();
     }
 }
