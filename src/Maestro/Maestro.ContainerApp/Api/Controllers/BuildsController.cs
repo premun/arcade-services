@@ -27,15 +27,18 @@ public class BuildsController : ControllerBase
     protected BuildAssetRegistryContext DBContext { get; }
     private ILogger<BuildsController> Logger { get; }
     private QueueProducerFactory Queue { get; }
+    private IRemoteFactory Factory { get; }
 
     public BuildsController(
         BuildAssetRegistryContext context,
         ILogger<BuildsController> logger,
-        QueueProducerFactory queueClientFactory)
+        QueueProducerFactory queueClientFactory,
+        IRemoteFactory factory)
     {
         DBContext = context;
         Logger = logger;
         Queue = queueClientFactory;
+        Factory = factory;
     }
 
     /// <summary>
@@ -178,9 +181,9 @@ public class BuildsController : ControllerBase
             return NotFound();
         }
 
-        //IRemote remote = await Factory.GetRemoteAsync(build.AzureDevOpsRepository ?? build.GitHubRepository, null);
-        //Microsoft.DotNet.DarcLib.Commit commit = await remote.GetCommitAsync(build.AzureDevOpsRepository ?? build.GitHubRepository, build.Commit);
-        //return Ok(new Models.Commit(commit.Author, commit.Sha, commit.Message));
+        IRemote remote = await Factory.GetRemoteAsync(build.AzureDevOpsRepository ?? build.GitHubRepository, null);
+        Microsoft.DotNet.DarcLib.Commit commit = await remote.GetCommitAsync(build.AzureDevOpsRepository ?? build.GitHubRepository, build.Commit);
+        return Ok(new Models.Commit(commit.Author, commit.Sha, commit.Message));
         throw new Exception("not implemented");
     }
 

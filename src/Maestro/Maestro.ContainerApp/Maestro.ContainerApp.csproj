@@ -22,11 +22,13 @@
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
     <PackageReference Include="NRedisStack" />
+    <PackageReference Include="Microsoft.DotNet.Internal.DependencyInjection" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Maestro.AzureDevOps\Maestro.AzureDevOps.csproj" />
     <ProjectReference Include="..\Maestro.Contracts\Maestro.Contracts.csproj" />
+    <ProjectReference Include="..\Maestro.DataProviders\Maestro.DataProviders.csproj" />
     <ProjectReference Include="..\Maestro.Data\Maestro.Data.csproj" />
   </ItemGroup>
 

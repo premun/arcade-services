@@ -4,10 +4,10 @@
 using Maestro.AzureDevOps;
 using Maestro.ContainerApp;
 using Maestro.ContainerApp.Actors;
+using Maestro.ContainerApp.Api.Controllers;
 using Maestro.ContainerApp.Queues;
 using Maestro.ContainerApp.Utils;
 using Maestro.Data;
-//using Microsoft.AspNetCore.Authentication;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.GitHub.Authentication;
 using Microsoft.EntityFrameworkCore;
@@ -28,11 +28,13 @@ builder.Services.AddLogging(b =>
 
 builder.AddBackgroudQueueProcessors();
 builder.AddActors();
+builder.AddControllerConfigurations();
 
 builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
 {
     options.UseSqlServer(builder.GetConnectionString("BuildAssetRegistry"));
 });
+builder.Services.AddSingleton<IInstallationLookup, BuildAssetRegistryInstallationLookup>();
 
 
 // transient services
