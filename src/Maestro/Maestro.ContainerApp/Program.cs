@@ -7,6 +7,7 @@ using Maestro.ContainerApp.Actors;
 using Maestro.ContainerApp.Queues;
 using Maestro.ContainerApp.Utils;
 using Maestro.Data;
+//using Microsoft.AspNetCore.Authentication;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.GitHub.Authentication;
 using Microsoft.EntityFrameworkCore;
@@ -35,12 +36,16 @@ builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
 
 
 // transient services
+builder.Services.AddTransient<Microsoft.Extensions.Internal.ISystemClock, SystemClockInternal>();
+builder.Services.AddTransient<IGitHubAppTokenProvider, GitHubAppTokenProvider>();
+builder.Services.AddTransient<IInstallationLookup, InMemoryCacheInstallationLookup>();
 builder.Services.AddTransient<IGitHubTokenProvider, GitHubTokenProvider>();
 builder.Services.AddTransient<IAzureDevOpsTokenProvider, AzureDevOpsTokenProvider>();
 builder.Services.AddTransient<DarcRemoteMemoryCache>();
 builder.Services.AddTransient<TemporaryFiles>();
 builder.Services.AddTransient<IBarClient, MaestroBarClient>();
 builder.Services.AddTransient<ILocalGit, LocalGit>();
+builder.Services.AddTransient<IRemoteFactory, DarcRemoteFactory>();
 
 // singleton services
 builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(builder.GetConnectionString("Redis")));
