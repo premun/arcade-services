@@ -12,9 +12,12 @@ namespace Maestro.ContainerApp.Actors;
 ///     A <see cref="PullRequestActorImplementation" /> for batched subscriptions that reads its Target and Merge Policies
 ///     from the configuration for a repository
 /// </summary>
-public class BatchedPullRequestActorImplementation : PullRequestActor
+public class BatchedPullRequestActor : PullRequestActor
 {
-    public BatchedPullRequestActorImplementation(
+    private readonly PullRequestActorId _actorId;
+    private readonly BuildAssetRegistryContext _context;
+
+    public BatchedPullRequestActor(
         PullRequestActorId actorId,
         IMergePolicyEvaluator mergePolicyEvaluator,
         BuildAssetRegistryContext context,
@@ -22,29 +25,23 @@ public class BatchedPullRequestActorImplementation : PullRequestActor
         IRemoteFactory darcFactory,
         ILoggerFactory loggerFactory,
         IConnectionMultiplexer redis)
-        :
-        base(
-        actorId,
-        mergePolicyEvaluator,
-        context,
-        actorFactory,
-        darcFactory,
-        loggerFactory,
-        redis)
+        : base(actorId, mergePolicyEvaluator, context, actorFactory, darcFactory, loggerFactory, redis)
     {
+        _actorId = actorId;
+        _context = context;
     }
 
     protected override Task<(string repository, string branch)> GetTargetAsync()
     {
-        var target = ActorId.Parse();
+        var target = _actorId.Parse();
         return Task.FromResult((target.repository, target.branch));
     }
 
     protected override async Task<IReadOnlyList<MergePolicyDefinition>> GetMergePolicyDefinitions()
     {
-        var target = ActorId.Parse();
+        var target = _actorId.Parse();
         RepositoryBranch? repositoryBranch =
-            await Context.RepositoryBranches.FindAsync(target.repository, target.branch);
+            await _context.RepositoryBranches.FindAsync(target.repository, target.branch);
 
         return repositoryBranch?.PolicyObject?.MergePolicies as IReadOnlyList<MergePolicyDefinition> ?? Array.Empty<MergePolicyDefinition>();
     }

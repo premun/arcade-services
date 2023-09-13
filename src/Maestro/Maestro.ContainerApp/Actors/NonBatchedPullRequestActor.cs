@@ -12,40 +12,40 @@ namespace Maestro.ContainerApp.Actors;
 ///     A <see cref="PullRequestActorImplementation" /> that reads its Merge Policies and Target information from a
 ///     non-batched subscription object
 /// </summary>
-public class NonBatchedPullRequestActorImplementation : PullRequestActor
+public class NonBatchedPullRequestActor : PullRequestActor
 {
     private readonly Lazy<Task<Subscription>> _lazySubscription;
+    private readonly PullRequestActorId _actorId;
+    private readonly BuildAssetRegistryContext _dbContext;
     private readonly IPullRequestPolicyFailureNotifier _pullRequestPolicyFailureNotifier;
+    private readonly IDatabase _redisCache;
 
-    public NonBatchedPullRequestActorImplementation(
+    public NonBatchedPullRequestActor(
         PullRequestActorId actorId,
         IMergePolicyEvaluator mergePolicyEvaluator,
-        BuildAssetRegistryContext context,
+        BuildAssetRegistryContext dbContext,
         IActorFactory actorFactory,
         IRemoteFactory darcFactory,
         ILoggerFactory loggerFactory,
         IPullRequestPolicyFailureNotifier pullRequestPolicyFailureNotifier,
-        IConnectionMultiplexer redis) : base(
-            actorId,
-            mergePolicyEvaluator,
-            context,
-            actorFactory,
-            darcFactory,
-            loggerFactory,
-            redis)
+        IConnectionMultiplexer redis)
+        : base(actorId, mergePolicyEvaluator, dbContext, actorFactory, darcFactory, loggerFactory, redis)
     {
         _lazySubscription = new Lazy<Task<Subscription>>(RetrieveSubscription);
+        _actorId = actorId;
+        _dbContext = dbContext;
         _pullRequestPolicyFailureNotifier = pullRequestPolicyFailureNotifier;
+        _redisCache = redis.GetDatabase();
     }
 
     private async Task<Subscription> RetrieveSubscription()
     {
-        Subscription? subscription = await Context.Subscriptions.FindAsync(ActorId.Id);
+        Subscription? subscription = await _dbContext.Subscriptions.FindAsync(_actorId.Id);
         if (subscription == null)
         {
-            await Db.KeyDeleteAsync(PullRequestRedisKey);
+            await _redisCache.KeyDeleteAsync(PullRequestRedisKey);
 
-            throw new SubscriptionException($"Subscription '{ActorId.Id}' was not found...");
+            throw new SubscriptionException($"Subscription '{_actorId.Id}' was not found...");
         }
 
         return subscription;

@@ -28,6 +28,15 @@ public abstract class PullRequestActor : IPullRequestActor
     public const string DependencyUpdateBegin = "[DependencyUpdate]: <> (Begin)";
     public const string DependencyUpdateEnd = "[DependencyUpdate]: <> (End)";
 
+    private readonly ILogger _logger;
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly IMergePolicyEvaluator _mergePolicyEvaluator;
+    private readonly BuildAssetRegistryContext _dbContext;
+    private readonly IActorFactory _actorFactory;
+    private readonly IRemoteFactory _darcRemoteFactory;
+    private readonly IDatabase _redisCache;
+    private readonly PullRequestActorId _actorId;
+
     protected PullRequestActor(
         PullRequestActorId actorId,
         IMergePolicyEvaluator mergePolicyEvaluator,
@@ -37,32 +46,23 @@ public abstract class PullRequestActor : IPullRequestActor
         ILoggerFactory loggerFactory,
         IConnectionMultiplexer redis)
     {
-        MergePolicyEvaluator = mergePolicyEvaluator;
-        Context = context;
-        ActorFactory = actorFactory;
-        DarcRemoteFactory = darcFactory;
-        LoggerFactory = loggerFactory;
-        Logger = loggerFactory.CreateLogger(GetType());
-        Redis = redis;
-        Db = redis.GetDatabase();
-        ActorId = actorId;
-        PullRequestRedisKey = PullRequest + ActorId.Id;
-        PullRequestUpdateRedisKey = PullRequest + ActorId.Id;
-        PullRequestCheckRedisKey = PullRequestCheck + ActorId.Id;
+        _mergePolicyEvaluator = mergePolicyEvaluator;
+        _dbContext = context;
+        _actorFactory = actorFactory;
+        _darcRemoteFactory = darcFactory;
+        _loggerFactory = loggerFactory;
+        _logger = loggerFactory.CreateLogger(GetType());
+        _redisCache = redis.GetDatabase();
+        _actorId = actorId;
+
+        PullRequestRedisKey = PullRequest + _actorId.Id;
+        PullRequestUpdateRedisKey = PullRequest + _actorId.Id;
+        PullRequestCheckRedisKey = PullRequestCheck + _actorId.Id;
     }
 
-    public ILogger Logger { get; }
-    public ILoggerFactory LoggerFactory { get; }
-    public IMergePolicyEvaluator MergePolicyEvaluator { get; }
-    public BuildAssetRegistryContext Context { get; }
-    public IActorFactory ActorFactory { get; }
-    public IRemoteFactory DarcRemoteFactory { get; }
-    public IConnectionMultiplexer Redis { get; }
-    public IDatabase Db { get; }
-    public PullRequestActorId ActorId { get; }
-    public string PullRequestRedisKey { get; }
-    public string PullRequestUpdateRedisKey { get; }
-    public string PullRequestCheckRedisKey { get; }
+    protected string PullRequestRedisKey { get; }
+    protected string PullRequestUpdateRedisKey { get; }
+    protected string PullRequestCheckRedisKey { get; }
 
     /// <summary>
     ///     Applies or queues asset updates for the target repository and branch from the given build and list of assets.
@@ -101,37 +101,37 @@ public abstract class PullRequestActor : IPullRequestActor
             if (pr != null && !canUpdate)
             {
                 var updateAssetsParametersList =
-                    JsonSerializer.Deserialize<List<UpdateAssetsParameters>>(await Db.StringGetAsync(PullRequestUpdateRedisKey));
+                    JsonSerializer.Deserialize<List<UpdateAssetsParameters>>(await _redisCache.StringGetAsync(PullRequestUpdateRedisKey));
                 if (updateAssetsParametersList != null)
                 {
                     updateAssetsParametersList.Add(updateParameter);
-                    await Db.StringSetAsync(PullRequestUpdateRedisKey, JsonSerializer.Serialize(updateAssetsParametersList));
+                    await _redisCache.StringSetAsync(PullRequestUpdateRedisKey, JsonSerializer.Serialize(updateAssetsParametersList));
                 }
                 else
                 {
-                    await Db.StringSetAsync(
+                    await _redisCache.StringSetAsync(
                         PullRequestUpdateRedisKey,
                         JsonSerializer.Serialize(new List<UpdateAssetsParameters> { updateParameter }));
                 }
-                Logger.LogInformation($"Current Pull request '{pr.Url}' cannot be updated, update queued.");
+                _logger.LogInformation($"Current Pull request '{pr.Url}' cannot be updated, update queued.");
                 return;
             }
 
             if (pr != null)
             {
                 await UpdatePullRequestAsync(pr, new List<UpdateAssetsParameters> { updateParameter });
-                Logger.LogInformation($"Pull Request '{pr.Url}' updated.");
+                _logger.LogInformation($"Pull Request '{pr.Url}' updated.");
                 return;
             }
 
             string prUrl = await CreatePullRequestAsync(new List<UpdateAssetsParameters> { updateParameter });
             if (prUrl == null)
             {
-                Logger.LogInformation("Updates require no changes, no pull request created.");
+                _logger.LogInformation("Updates require no changes, no pull request created.");
                 return;
             }
 
-            Logger.LogInformation($"Pull request '{prUrl}' created.");
+            _logger.LogInformation($"Pull request '{prUrl}' created.");
             return;
         }
         catch (HttpRequestException reqEx) when (reqEx.Message.Contains(((int)HttpStatusCode.Unauthorized).ToString()))
@@ -139,7 +139,7 @@ public abstract class PullRequestActor : IPullRequestActor
             // We want to preserve the HttpRequestException's information but it's not serializable
             // We'll log the full exception object so it's in Application Insights, and strip any single quotes from the message to ensure 
             // GitHub issues are properly created.
-            Logger.LogError(reqEx, "Failure to authenticate to repository");
+            _logger.LogError(reqEx, "Failure to authenticate to repository");
             throw new DarcAuthenticationFailureException($"Failure to authenticate: {reqEx.Message}");
         }
     }
@@ -154,12 +154,12 @@ public abstract class PullRequestActor : IPullRequestActor
     /// </returns>
     public async Task ProcessPendingUpdatesAsync()
     {
-        Logger.LogInformation("Processing pending updates");
-        var maybeUpdates = JsonSerializer.Deserialize<List<UpdateAssetsParameters>>(await Db.StringGetAsync(PullRequestUpdateRedisKey));
+        _logger.LogInformation("Processing pending updates");
+        var maybeUpdates = JsonSerializer.Deserialize<List<UpdateAssetsParameters>>(await _redisCache.StringGetAsync(PullRequestUpdateRedisKey));
         List<UpdateAssetsParameters> updates = maybeUpdates != null ? maybeUpdates : null;
         if (updates == null || updates.Count < 1)
         {
-            Logger.LogInformation("No Pending Updates");
+            _logger.LogInformation("No Pending Updates");
             return;
         }
 
@@ -167,7 +167,7 @@ public abstract class PullRequestActor : IPullRequestActor
 
         if (pr != null && !canUpdate)
         {
-            Logger.LogInformation($"PR {pr?.Url} cannot be updated.");
+            _logger.LogInformation($"PR {pr?.Url} cannot be updated.");
             return;
         }
 
@@ -176,7 +176,7 @@ public abstract class PullRequestActor : IPullRequestActor
         {
             await UpdatePullRequestAsync(pr, updates);
             result = $"Pull Request '{pr.Url}' updated.";
-            Logger.LogInformation($"Pull Request '{pr.Url}' updated.");
+            _logger.LogInformation($"Pull Request '{pr.Url}' updated.");
         }
         else
         {
@@ -189,12 +189,12 @@ public abstract class PullRequestActor : IPullRequestActor
             {
                 result = $"Pull Request '{prUrl}' created.";
             }
-            Logger.LogInformation(result);
+            _logger.LogInformation(result);
         }
 
-        await Db.KeyDeleteAsync(PullRequestUpdateRedisKey);
+        await _redisCache.KeyDeleteAsync(PullRequestUpdateRedisKey);
 
-        Logger.LogInformation("Pending updates applied. " + result);
+        _logger.LogInformation("Pending updates applied. " + result);
         return;
     }
 
@@ -209,7 +209,7 @@ public abstract class PullRequestActor : IPullRequestActor
 
     private async Task<string> GetSourceRepositoryAsync(Guid subscriptionId)
     {
-        Subscription subscription = await Context.Subscriptions.FindAsync(subscriptionId);
+        Subscription subscription = await _dbContext.Subscriptions.FindAsync(subscriptionId);
         return subscription?.SourceRepository;
     }
 
@@ -220,7 +220,7 @@ public abstract class PullRequestActor : IPullRequestActor
     /// <returns>Build</returns>
     private Task<Build> GetBuildAsync(int buildId)
     {
-        return Context.Builds.FindAsync(buildId).AsTask();
+        return _dbContext.Builds.FindAsync(buildId).AsTask();
     }
 
     protected virtual Task TagSourceRepositoryGitHubContactsIfPossibleAsync(InProgressPullRequest pr)
@@ -242,14 +242,14 @@ public abstract class PullRequestActor : IPullRequestActor
     public virtual async Task<(InProgressPullRequest pr, bool canUpdate)> SynchronizeInProgressPullRequestAsync()
     {
         var maybePr =
-            JsonSerializer.Deserialize<InProgressPullRequest>(await Db.StringGetAsync(PullRequestRedisKey));
+            JsonSerializer.Deserialize<InProgressPullRequest>(await _redisCache.StringGetAsync(PullRequestRedisKey));
         if (maybePr != null)
         {
             InProgressPullRequest pr = maybePr;
             if (string.IsNullOrEmpty(pr.Url))
             {
                 // somehow a bad PR got in the collection, remove it
-                await Db.KeyDeleteAsync(PullRequestRedisKey);
+                await _redisCache.KeyDeleteAsync(PullRequestRedisKey);
                 return (null, false);
             }
 
@@ -273,7 +273,7 @@ public abstract class PullRequestActor : IPullRequestActor
                     // that were just obtained. We don't want to unregister the reminder in these cases.
                     return (null, false);
                 default:
-                    Logger.LogError($"Unknown pull request synchronization result {result}");
+                    _logger.LogError($"Unknown pull request synchronization result {result}");
                     break;
             }
         }
@@ -290,28 +290,28 @@ public abstract class PullRequestActor : IPullRequestActor
     /// </returns>
     private async Task<SynchronizePullRequestResult> SynchronizePullRequestAsync(string prUrl)
     {
-        Logger.LogInformation($"Synchronizing Pull Request {prUrl}");
+        _logger.LogInformation($"Synchronizing Pull Request {prUrl}");
         var maybePr =
-            JsonSerializer.Deserialize<InProgressPullRequest>(await Db.StringGetAsync(PullRequestRedisKey));
+            JsonSerializer.Deserialize<InProgressPullRequest>(await _redisCache.StringGetAsync(PullRequestRedisKey));
         if (maybePr == null || maybePr.Url != prUrl)
         {
-            Logger.LogInformation($"Not Applicable: Pull Request '{prUrl}' is not tracked by maestro anymore.");
+            _logger.LogInformation($"Not Applicable: Pull Request '{prUrl}' is not tracked by maestro anymore.");
             return SynchronizePullRequestResult.UnknownPR;
         }
 
         (string targetRepository, _) = await GetTargetAsync();
-        IRemote darc = await DarcRemoteFactory.GetRemoteAsync(targetRepository, Logger);
+        IRemote darc = await _darcRemoteFactory.GetRemoteAsync(targetRepository, _logger);
 
         InProgressPullRequest pr = maybePr;
 
-        Logger.LogInformation($"Get status for PullRequest: {prUrl}");
+        _logger.LogInformation($"Get status for PullRequest: {prUrl}");
         PrStatus status = await darc.GetPullRequestStatusAsync(prUrl);
         switch (status)
         {
             // If the PR is currently open, then evaluate the merge policies, which will potentially
             // merge the PR if they are successful.
             case PrStatus.Open:
-                Logger.LogInformation($"Status open for: {prUrl}");
+                _logger.LogInformation($"Status open for: {prUrl}");
                 MergePolicyCheckResult checkPolicyResult = await CheckMergePolicyAsync(pr, darc);
                 pr.MergePolicyResult = checkPolicyResult;
 
@@ -325,7 +325,7 @@ public abstract class PullRequestActor : IPullRequestActor
                             DependencyFlowEventReason.AutomaticallyMerged,
                             checkPolicyResult,
                             prUrl);
-                        await Db.KeyDeleteAsync(PullRequestRedisKey);
+                        await _redisCache.KeyDeleteAsync(PullRequestRedisKey);
                         return SynchronizePullRequestResult.Completed;
                     case MergePolicyCheckResult.FailedPolicies:
                         await TagSourceRepositoryGitHubContactsIfPossibleAsync(pr);
@@ -341,7 +341,7 @@ public abstract class PullRequestActor : IPullRequestActor
             case PrStatus.Merged:
             case PrStatus.Closed:
                 // If the PR has been merged, update the subscription information
-                Logger.LogInformation($"Status closed for: {prUrl}");
+                _logger.LogInformation($"Status closed for: {prUrl}");
                 if (status == PrStatus.Merged)
                 {
                     await UpdateSubscriptionsForMergedPRAsync(pr.ContainedSubscriptions);
@@ -357,20 +357,20 @@ public abstract class PullRequestActor : IPullRequestActor
                     reason,
                     pr.MergePolicyResult,
                     prUrl);
-                await Db.KeyDeleteAsync(PullRequestRedisKey);
+                await _redisCache.KeyDeleteAsync(PullRequestRedisKey);
 
                 // Also try to clean up the PR branch.
                 try
                 {
-                    Logger.LogInformation($"Try to clean up the PR branch {prUrl}");
+                    _logger.LogInformation($"Try to clean up the PR branch {prUrl}");
                     await darc.DeletePullRequestBranchAsync(prUrl);
                 }
                 catch (DarcException e)
                 {
-                    Logger.LogInformation(e, $"Failed to delete Branch associated with pull request {prUrl}");
+                    _logger.LogInformation(e, $"Failed to delete Branch associated with pull request {prUrl}");
                 }
 
-                Logger.LogInformation($"PR Has been manually {status}");
+                _logger.LogInformation($"PR Has been manually {status}");
                 return SynchronizePullRequestResult.Completed;
             default:
                 throw new NotImplementedException($"Unknown pr status '{status}'");
@@ -386,7 +386,7 @@ public abstract class PullRequestActor : IPullRequestActor
     private async Task<MergePolicyCheckResult> CheckMergePolicyAsync(IPullRequest pr, IRemote darc)
     {
         IReadOnlyList<MergePolicyDefinition> policyDefinitions = await GetMergePolicyDefinitions();
-        MergePolicyEvaluationResults result = await MergePolicyEvaluator.EvaluateAsync(
+        MergePolicyEvaluationResults result = await _mergePolicyEvaluator.EvaluateAsync(
             pr,
             darc,
             policyDefinitions);
@@ -395,12 +395,12 @@ public abstract class PullRequestActor : IPullRequestActor
         // As soon as one policy is actively failed, we enter a failed state.
         if (result.Failed)
         {
-            Logger.LogInformation($"NOT Merged: PR '{pr.Url}' failed policies {string.Join(", ", result.Results.Where(r => r.Status != MergePolicyEvaluationStatus.Success).Select(r => r.MergePolicyInfo.Name + r.Title))}");
+            _logger.LogInformation($"NOT Merged: PR '{pr.Url}' failed policies {string.Join(", ", result.Results.Where(r => r.Status != MergePolicyEvaluationStatus.Success).Select(r => r.MergePolicyInfo.Name + r.Title))}");
             return MergePolicyCheckResult.FailedPolicies;
         }
         else if (result.Pending)
         {
-            Logger.LogInformation($"NOT Merged: PR '{pr.Url}' has pending policies {string.Join(", ", result.Results.Where(r => r.Status == MergePolicyEvaluationStatus.Pending).Select(r => r.MergePolicyInfo.Name + r.Title))}");
+            _logger.LogInformation($"NOT Merged: PR '{pr.Url}' has pending policies {string.Join(", ", result.Results.Where(r => r.Status == MergePolicyEvaluationStatus.Pending).Select(r => r.MergePolicyInfo.Name + r.Title))}");
             return MergePolicyCheckResult.PendingPolicies;
         }
         if (result.Succeeded)
@@ -413,19 +413,19 @@ public abstract class PullRequestActor : IPullRequestActor
             }
             catch
             {
-                Logger.LogInformation($"NOT Merged: PR '{pr.Url}' Failed to merge");
+                _logger.LogInformation($"NOT Merged: PR '{pr.Url}' Failed to merge");
                 // Failure to merge is not exceptional, report on it.
             }
             if (merged)
             {
                 string passedPolicies = string.Join(", ", policyDefinitions.Select(p => p.Name));
-                Logger.LogInformation($"Merged: PR '{pr.Url}' passed policies {passedPolicies}");
+                _logger.LogInformation($"Merged: PR '{pr.Url}' passed policies {passedPolicies}");
                 return MergePolicyCheckResult.Merged;
             }
-            Logger.LogInformation($"NOT Merged: PR '{pr.Url}' has merge conflicts.");
+            _logger.LogInformation($"NOT Merged: PR '{pr.Url}' has merge conflicts.");
             return MergePolicyCheckResult.FailedToMerge;
         }
-        Logger.LogInformation($"NOT Merged: PR '{pr.Url}' There are no merge policies");
+        _logger.LogInformation($"NOT Merged: PR '{pr.Url}' There are no merge policies");
         return MergePolicyCheckResult.NoPolicies;
     }
 
@@ -444,14 +444,14 @@ public abstract class PullRequestActor : IPullRequestActor
     private async Task UpdateSubscriptionsForMergedPRAsync(
         IEnumerable<SubscriptionPullRequestUpdate> subscriptionPullRequestUpdates)
     {
-        Logger.LogInformation("Updating subscriptions for merged PR");
+        _logger.LogInformation("Updating subscriptions for merged PR");
         foreach (SubscriptionPullRequestUpdate update in subscriptionPullRequestUpdates)
         {
-            ISubscriptionActor actor = await ActorFactory.CreateSubscriptionActor(update.SubscriptionId);
+            ISubscriptionActor actor = _actorFactory.CreateSubscriptionActor(update.SubscriptionId);
             if (!await actor.UpdateForMergedPullRequestAsync(update.BuildId))
             {
-                Logger.LogInformation($"Failed to update subscription {update.SubscriptionId} for merged PR.");
-                await Db.KeyDeleteAsync(PullRequestRedisKey);
+                _logger.LogInformation($"Failed to update subscription {update.SubscriptionId} for merged PR.");
+                await _redisCache.KeyDeleteAsync(PullRequestRedisKey);
             }
         }
     }
@@ -466,10 +466,10 @@ public abstract class PullRequestActor : IPullRequestActor
 
         foreach (SubscriptionPullRequestUpdate update in subscriptionPullRequestUpdates)
         {
-            ISubscriptionActor actor = await ActorFactory.CreateSubscriptionActor(update.SubscriptionId);
+            ISubscriptionActor actor = _actorFactory.CreateSubscriptionActor(update.SubscriptionId);
             if (!await actor.AddDependencyFlowEventAsync(update.BuildId, flowEvent, reason, policy, "PR", prUrl))
             {
-                Logger.LogInformation($"Failed to add dependency flow event for {update.SubscriptionId}.");
+                _logger.LogInformation($"Failed to add dependency flow event for {update.SubscriptionId}.");
             }
         }
     }
@@ -536,10 +536,10 @@ public abstract class PullRequestActor : IPullRequestActor
     private async Task<string> CreatePullRequestAsync(List<UpdateAssetsParameters> updates)
     {
         (string targetRepository, string targetBranch) = await GetTargetAsync();
-        IRemote darcRemote = await DarcRemoteFactory.GetRemoteAsync(targetRepository, Logger);
+        IRemote darcRemote = await _darcRemoteFactory.GetRemoteAsync(targetRepository, _logger);
 
         List<(UpdateAssetsParameters update, List<DependencyUpdate> deps)> requiredUpdates =
-            await GetRequiredUpdates(updates, DarcRemoteFactory, targetRepository, targetBranch);
+            await GetRequiredUpdates(updates, _darcRemoteFactory, targetRepository, targetBranch);
 
         if (requiredUpdates.Count < 1)
         {
@@ -551,7 +551,7 @@ public abstract class PullRequestActor : IPullRequestActor
 
         try
         {
-            string description = await CalculatePRDescriptionAndCommitUpdatesAsync(requiredUpdates, null, DarcRemoteFactory, targetRepository, newBranchName);
+            string description = await CalculatePRDescriptionAndCommitUpdatesAsync(requiredUpdates, null, _darcRemoteFactory, targetRepository, newBranchName);
 
             var inProgressPr = new InProgressPullRequest
             {
@@ -600,7 +600,7 @@ public abstract class PullRequestActor : IPullRequestActor
                     prUrl);
 
 
-                await Db.StringSetAsync(PullRequestRedisKey, JsonSerializer.Serialize(inProgressPr));
+                await _redisCache.StringSetAsync(PullRequestRedisKey, JsonSerializer.Serialize(inProgressPr));
                 return prUrl;
             }
 
@@ -651,13 +651,13 @@ public abstract class PullRequestActor : IPullRequestActor
         (UpdateAssetsParameters update, List<DependencyUpdate> deps) coherencyUpdate =
             requiredUpdates.Where(u => u.update.IsCoherencyUpdate).SingleOrDefault();
 
-        IRemote remote = await remoteFactory.GetRemoteAsync(targetRepository, Logger);
+        IRemote remote = await remoteFactory.GetRemoteAsync(targetRepository, _logger);
 
         // To keep a PR to as few commits as possible, if the number of
         // non-coherency updates is 1 then combine coherency updates with those.
         // Otherwise, put all coherency updates in a separate commit.
         bool combineCoherencyWithNonCoherency = (nonCoherencyUpdates.Count == 1);
-        PullRequestDescriptionBuilder pullRequestDescriptionBuilder = new PullRequestDescriptionBuilder(LoggerFactory, description);
+        PullRequestDescriptionBuilder pullRequestDescriptionBuilder = new PullRequestDescriptionBuilder(_loggerFactory, description);
 
         foreach ((UpdateAssetsParameters update, List<DependencyUpdate> deps) in nonCoherencyUpdates)
         {
@@ -749,10 +749,10 @@ public abstract class PullRequestActor : IPullRequestActor
     private async Task UpdatePullRequestAsync(InProgressPullRequest pr, List<UpdateAssetsParameters> updates)
     {
         (string targetRepository, string targetBranch) = await GetTargetAsync();
-        IRemote darcRemote = await DarcRemoteFactory.GetRemoteAsync(targetRepository, Logger);
+        IRemote darcRemote = await _darcRemoteFactory.GetRemoteAsync(targetRepository, _logger);
 
         List<(UpdateAssetsParameters update, List<DependencyUpdate> deps)> requiredUpdates =
-            await GetRequiredUpdates(updates, DarcRemoteFactory, targetRepository, targetBranch);
+            await GetRequiredUpdates(updates, _darcRemoteFactory, targetRepository, targetBranch);
 
         if (requiredUpdates.Count < 1)
         {
@@ -804,11 +804,11 @@ public abstract class PullRequestActor : IPullRequestActor
             MergePolicyCheckResult.PendingPolicies,
             pr.Url);
 
-        pullRequest.Description = await CalculatePRDescriptionAndCommitUpdatesAsync(requiredUpdates, pullRequest.Description, DarcRemoteFactory, targetRepository, headBranch);
+        pullRequest.Description = await CalculatePRDescriptionAndCommitUpdatesAsync(requiredUpdates, pullRequest.Description, _darcRemoteFactory, targetRepository, headBranch);
         pullRequest.Title = await ComputePullRequestTitleAsync(pr, targetBranch);
         await darcRemote.UpdatePullRequestAsync(pr.Url, pullRequest);
 
-        await Db.StringSetAsync(PullRequestRedisKey, JsonSerializer.Serialize(pr));
+        await _redisCache.StringSetAsync(PullRequestRedisKey, JsonSerializer.Serialize(pr));
     }
 
 
@@ -871,9 +871,9 @@ public abstract class PullRequestActor : IPullRequestActor
         string targetRepository,
         string branch)
     {
-        Logger.LogInformation($"Getting Required Updates from {branch} to {targetRepository}");
+        _logger.LogInformation($"Getting Required Updates from {branch} to {targetRepository}");
         // Get a remote factory for the target repo
-        IRemote darc = await remoteFactory.GetRemoteAsync(targetRepository, Logger);
+        IRemote darc = await remoteFactory.GetRemoteAsync(targetRepository, _logger);
 
         var requiredUpdates = new List<(UpdateAssetsParameters update, List<DependencyUpdate> deps)>();
         // Existing details 
@@ -925,12 +925,12 @@ public abstract class PullRequestActor : IPullRequestActor
         bool strictCheckFailed = false;
         try
         {
-            Logger.LogInformation($"Running a coherency check on the existing dependencies for branch {branch} of repo {targetRepository}");
+            _logger.LogInformation($"Running a coherency check on the existing dependencies for branch {branch} of repo {targetRepository}");
             coherencyUpdates = await darc.GetRequiredCoherencyUpdatesAsync(existingDependencies, remoteFactory, CoherencyMode.Strict);
         }
         catch (DarcCoherencyException)
         {
-            Logger.LogInformation("Failed attempting strict coherency update on branch '{strictCoherencyFailedBranch}' of repo '{strictCoherencyFailedRepo}'.  Will now retry in Legacy mode.",
+            _logger.LogInformation("Failed attempting strict coherency update on branch '{strictCoherencyFailedBranch}' of repo '{strictCoherencyFailedRepo}'.  Will now retry in Legacy mode.",
                  branch, targetRepository);
             strictCheckFailed = true;
         }
@@ -939,7 +939,7 @@ public abstract class PullRequestActor : IPullRequestActor
             coherencyUpdates = await darc.GetRequiredCoherencyUpdatesAsync(existingDependencies, remoteFactory, CoherencyMode.Legacy);
             // If the above call didn't throw, that means legacy worked while strict did not.
             // Send a special trace that can be easily queried later from App Insights, to gauge when everything can handle Strict mode.
-            Logger.LogInformation("Strict coherency update failed, but Legacy update worked for branch '{strictCoherencyFailedBranch}' of repo '{strictCoherencyFailedRepo}'.",
+            _logger.LogInformation("Strict coherency update failed, but Legacy update worked for branch '{strictCoherencyFailedBranch}' of repo '{strictCoherencyFailedRepo}'.",
                  branch, targetRepository);
         }
 
@@ -954,23 +954,23 @@ public abstract class PullRequestActor : IPullRequestActor
             requiredUpdates.Add((coherencyUpdateParameters, coherencyUpdates.ToList()));
         }
 
-        Logger.LogInformation("Finished getting Required Updates from {branch} to {targetRepository}", branch, targetRepository);
+        _logger.LogInformation("Finished getting Required Updates from {branch} to {targetRepository}", branch, targetRepository);
         return requiredUpdates;
     }
 
     private async Task<RepositoryBranchUpdate> GetRepositoryBranchUpdate()
     {
         (string repo, string branch) = await GetTargetAsync();
-        RepositoryBranchUpdate update = await Context.RepositoryBranchUpdates.FindAsync(repo, branch);
+        RepositoryBranchUpdate update = await _dbContext.RepositoryBranchUpdates.FindAsync(repo, branch);
         if (update == null)
         {
             RepositoryBranch repoBranch = await GetRepositoryBranch(repo, branch);
-            Context.RepositoryBranchUpdates.Add(
+            _dbContext.RepositoryBranchUpdates.Add(
                 update = new RepositoryBranchUpdate { RepositoryBranch = repoBranch });
         }
         else
         {
-            Context.RepositoryBranchUpdates.Update(update);
+            _dbContext.RepositoryBranchUpdates.Update(update);
         }
 
         return update;
@@ -978,10 +978,10 @@ public abstract class PullRequestActor : IPullRequestActor
 
     private async Task<RepositoryBranch> GetRepositoryBranch(string repo, string branch)
     {
-        RepositoryBranch repoBranch = await Context.RepositoryBranches.FindAsync(repo, branch);
+        RepositoryBranch repoBranch = await _dbContext.RepositoryBranches.FindAsync(repo, branch);
         if (repoBranch == null)
         {
-            Context.RepositoryBranches.Add(
+            _dbContext.RepositoryBranches.Add(
                 repoBranch = new RepositoryBranch
                 {
                     RepositoryName = repo,
@@ -990,7 +990,7 @@ public abstract class PullRequestActor : IPullRequestActor
         }
         else
         {
-            Context.RepositoryBranches.Update(repoBranch);
+            _dbContext.RepositoryBranches.Update(repoBranch);
         }
 
         return repoBranch;
