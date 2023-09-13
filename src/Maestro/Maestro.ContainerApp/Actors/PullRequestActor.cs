@@ -10,6 +10,7 @@ using System.Runtime.Serialization;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Maestro.ContainerApp.Actors.ActionRunner;
 using Maestro.Contracts;
 using Maestro.Data;
 using Maestro.Data.Models;
@@ -21,7 +22,9 @@ using StackExchange.Redis;
 using Asset = Maestro.Contracts.Asset;
 using AssetData = Microsoft.DotNet.Maestro.Client.Models.AssetData;
 
-namespace SubscriptionActorService
+#nullable disable
+
+namespace Maestro.ContainerApp.Actors
 {
     /// <summary>
     ///     A service fabric actor implementation that is responsible for creating and updating pull requests for dependency

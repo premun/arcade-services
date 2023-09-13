@@ -4,6 +4,8 @@
 using Maestro.ContainerApp;
 using Maestro.Data;
 using Microsoft.Extensions.Logging.Console;
+using Microsoft.Extensions.Azure;
+using StackExchange.Redis;
 using Maestro.ContainerApp.Queues;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,9 +21,7 @@ builder.Services.AddLogging(b =>
      .AddConsoleFormatter<SimpleConsoleLoggerFormatter, SimpleConsoleFormatterOptions>(
         options => options.TimestampFormat = "[HH:mm:ss] "));
 
-builder.AddAzureQueues();
-builder.Services.AddHostedService<QueueProcessor>();
-builder.Services.AddTransient<SubscriptionQueueProcessor>();
+builder.AddBackgroudQueueProcessors();
 
 builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
 {
@@ -35,6 +35,8 @@ builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
         options.UseSqlServer(connectionString);
     } 
 });
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect("host.docker.internal:6379"));
 
 var app = builder.Build();
 

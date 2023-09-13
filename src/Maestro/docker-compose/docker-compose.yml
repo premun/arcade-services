@@ -24,8 +24,11 @@ services:
     depends_on:
       - azurite
       - db
+      - redis
     links:
       - azurite
+      - db
+      - redis
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=https://+:443;http://+:80
@@ -44,3 +47,9 @@ services:
       dockerfile: src/Maestro/Maestro.Data/docker/Dockerfile
     ports:
       - 1433:1433
+
+  redis:
+    image: amd64/redis
+    container_name: redis
+    ports:
+      - 6379:6379
