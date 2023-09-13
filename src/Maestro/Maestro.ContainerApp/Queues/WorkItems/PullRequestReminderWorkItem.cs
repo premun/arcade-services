@@ -3,6 +3,6 @@
 
 namespace Maestro.ContainerApp.Queues.WorkItems;
 
-public class PullRequestCheckWorkItem : BackgroundWorkItem
+public class PullRequestReminderWorkItem : BackgroundWorkItem
 {
 }

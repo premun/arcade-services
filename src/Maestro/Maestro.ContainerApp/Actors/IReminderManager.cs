@@ -12,7 +12,7 @@ namespace Maestro.ContainerApp.Actors;
 
 public interface IReminderManager
 {
-    Task TryRegisterReminderAsync(string reminderName, TimeSpan period);
+    Task TryRegisterReminderAsync(string reminderName, TimeSpan visibilityTimeout);
 
     Task TryUnregisterReminderAsync(string reminderName);
 }
@@ -30,10 +30,10 @@ public class ReminderManager : IReminderManager
         Database = redis.GetDatabase();
     }
 
-    public async Task TryRegisterReminderAsync(string reminderName, TimeSpan period)
+    public async Task TryRegisterReminderAsync(string reminderName, TimeSpan visibilityTimeout)
     {
-        var client = Queue.Create<PullRequestCheckWorkItem>();
-        var sendReceipt = await client.SendAsync(new PullRequestCheckWorkItem(), period);
+        var client = Queue.Create<PullRequestReminderWorkItem>();
+        var sendReceipt = await client.SendAsync(new PullRequestReminderWorkItem(), visibilityTimeout);
         await Database.StringSetAsync(reminderName,
             JsonSerializer.Serialize(new ReminderArguments(sendReceipt.PopReceipt, sendReceipt.MessageId)));
     }
@@ -47,7 +47,7 @@ public class ReminderManager : IReminderManager
         }
 
         var reminderMessage = JsonSerializer.Deserialize<ReminderArguments>(await Database.StringGetAsync(reminderName));
-        var client = Queue.Create<PullRequestCheckWorkItem>();
+        var client = Queue.Create<PullRequestReminderWorkItem>();
         await client.DeleteAsync(reminderMessage.MessageId, reminderMessage.PopReceipt);
     }
 

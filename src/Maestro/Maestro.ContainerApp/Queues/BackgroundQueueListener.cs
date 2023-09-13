@@ -70,8 +70,8 @@ internal class BackgroundQueueListener : BackgroundService
     {
         switch (item)
         {
-            case PullRequestCheckWorkItem checkWorkItem:
-                _logger.LogInformation($"Processing {nameof(PullRequestCheckWorkItem)}: test");
+            case PullRequestReminderWorkItem checkWorkItem:
+                _logger.LogInformation($"Processing {nameof(PullRequestReminderWorkItem)}");
                 break;
             case StartSubscriptionUpdateWorkItem startSubscriptionUpdate:
                 _logger.LogInformation($"Processing { nameof(StartSubscriptionUpdateWorkItem) }: { startSubscriptionUpdate.SubscriptionId }");
