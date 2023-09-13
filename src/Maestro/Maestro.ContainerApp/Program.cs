@@ -2,12 +2,13 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Maestro.ContainerApp;
+using Maestro.ContainerApp.Actors;
+using Maestro.ContainerApp.Queues;
+using Maestro.ContainerApp.Utils;
 using Maestro.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Console;
 using StackExchange.Redis;
-using Maestro.ContainerApp.Queues;
-using Microsoft.EntityFrameworkCore;
-using Maestro.ContainerApp.Utils;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +23,7 @@ builder.Services.AddLogging(b =>
         options => options.TimestampFormat = "[HH:mm:ss] "));
 
 builder.AddBackgroudQueueProcessors();
+builder.AddActors();
 
 builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
 {
