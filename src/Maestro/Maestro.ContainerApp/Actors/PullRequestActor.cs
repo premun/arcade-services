@@ -12,82 +12,16 @@ using Maestro.Data.Models;
 using Maestro.MergePolicyEvaluation;
 using Microsoft.DotNet.DarcLib;
 using StackExchange.Redis;
+
 using Asset = Maestro.Contracts.Asset;
 using AssetData = Microsoft.DotNet.Maestro.Client.Models.AssetData;
-using PullRequestActorId = Maestro.ContainerApp.Actors.PullRequestActorId;
 
+/// TODO: remove & fix issues
 #nullable disable
 
 namespace Maestro.ContainerApp.Actors
 {
-    /// <summary>
-    ///     A service fabric actor implementation that is responsible for creating and updating pull requests for dependency
-    ///     updates.
-    /// </summary>
-    public class PullRequestActor : IPullRequestActor, IActionTracker
-    {
-        private readonly IMergePolicyEvaluator _mergePolicyEvaluator;
-        private readonly BuildAssetRegistryContext _context;
-        private readonly IRemoteFactory _darcFactory;
-        private readonly ILoggerFactory _loggerFactory;
-        private readonly IActionRunner _actionRunner;
-        private readonly IPullRequestPolicyFailureNotifier _pullRequestPolicyFailureNotifier;
-        private readonly IConnectionMultiplexer _redis;
-
-        /// <summary>
-        ///     Creates a new PullRequestActor
-        /// </summary>
-        /// <param name="id">
-        ///     The actor id for this actor.
-        ///     If it is a <see cref="Guid" /> actor id, then it is required to be the id of a non-batched subscription in the
-        ///     database
-        ///     If it is a <see cref="string" /> actor id, then it MUST be an actor id created with
-        ///     <see cref="PullRequestActorId.Create(string, string)" /> for use with all subscriptions targeting the specified
-        ///     repository and branch.
-        /// </param>
-        /// <param name="provider"></param>
-        public PullRequestActor(
-            IMergePolicyEvaluator mergePolicyEvaluator,
-            BuildAssetRegistryContext context,
-            IRemoteFactory darcFactory,
-            ILoggerFactory loggerFactory,
-            IActionRunner actionRunner,
-            IPullRequestPolicyFailureNotifier pullRequestPolicyFailureNotifier,
-            IConnectionMultiplexer redis)
-        {
-            _mergePolicyEvaluator = mergePolicyEvaluator;
-            _context = context;
-            _darcFactory = darcFactory;
-            _loggerFactory = loggerFactory;
-            _actionRunner = actionRunner;
-            _pullRequestPolicyFailureNotifier = pullRequestPolicyFailureNotifier;
-            _redis = redis;
-        }
-
-        public PullRequestActorImplementation Implementation { get; private set; }
-
-        public Task TrackSuccessfulAction(string action, string result)
-        {
-            return Implementation.TrackSuccessfulAction(action, result);
-        }
-
-        public Task TrackFailedAction(string action, string result, string method, string arguments)
-        {
-            return Implementation.TrackFailedAction(action, result, method, arguments);
-        }
-
-        public Task<string> RunActionAsync(string method, string arguments)
-        {
-            return Implementation.RunActionAsync(method, arguments);
-        }
-
-        public Task UpdateAssetsAsync(Guid subscriptionId, int buildId, string sourceRepo, string sourceSha, List<Asset> assets)
-        {
-            return Implementation.UpdateAssetsAsync(subscriptionId, buildId, sourceRepo, sourceSha, assets);
-        }
-    }
-
-    public abstract class PullRequestActorImplementation : IPullRequestActor, IActionTracker
+    public abstract class PullRequestActor : IPullRequestActor, IActionTracker
     {
         public const string PullRequestCheck = "pullRequestCheck";
         public const string PullRequestUpdate = "pullRequestUpdate";
@@ -95,19 +29,19 @@ namespace Maestro.ContainerApp.Actors
         public const string DependencyUpdateBegin = "[DependencyUpdate]: <> (Begin)";
         public const string DependencyUpdateEnd = "[DependencyUpdate]: <> (End)";
 
-        protected PullRequestActorImplementation(
+        protected PullRequestActor(
             PullRequestActorId actorId,
             IMergePolicyEvaluator mergePolicyEvaluator,
             BuildAssetRegistryContext context,
+            IActorFactory actorFactory,
             IRemoteFactory darcFactory,
             ILoggerFactory loggerFactory,
-            IActionRunner actionRunner,
             IConnectionMultiplexer redis)
         {
             MergePolicyEvaluator = mergePolicyEvaluator;
             Context = context;
+            ActorFactory = actorFactory;
             DarcRemoteFactory = darcFactory;
-            ActionRunner = actionRunner;
             LoggerFactory = loggerFactory;
             Logger = loggerFactory.CreateLogger(GetType());
             Redis = redis;
@@ -122,8 +56,8 @@ namespace Maestro.ContainerApp.Actors
         public ILoggerFactory LoggerFactory { get; }
         public IMergePolicyEvaluator MergePolicyEvaluator { get; }
         public BuildAssetRegistryContext Context { get; }
+        public IActorFactory ActorFactory { get; }
         public IRemoteFactory DarcRemoteFactory { get; }
-        public IActionRunner ActionRunner { get; }
         public IConnectionMultiplexer Redis { get; }
         public IDatabase Db { get; }
         public PullRequestActorId ActorId { get; }
@@ -155,14 +89,14 @@ namespace Maestro.ContainerApp.Actors
             await Context.SaveChangesAsync();
         }
 
-        public Task<string> RunActionAsync(string method, string arguments)
+        public Task UpdateAssetsAsync(Guid subscriptionId, int buildId, string sourceRepo, string sourceSha, List<Asset> assets)
         {
-            return ActionRunner.RunAction(this, method, arguments);
+            return RunUpdateAssetsAsync(subscriptionId, buildId, sourceRepo, sourceSha, assets);
         }
 
-        Task IPullRequestActor.UpdateAssetsAsync(Guid subscriptionId, int buildId, string sourceRepo, string sourceSha, List<Asset> assets)
+        public Task ProcessPendingUpdatesAsync()
         {
-            return ActionRunner.ExecuteAction(() => UpdateAssetsAsync(subscriptionId, buildId, sourceRepo, sourceSha, assets));
+            return RunProcessPendingUpdatesAsync();
         }
 
         protected abstract Task<(string repository, string branch)> GetTargetAsync();
@@ -190,11 +124,6 @@ namespace Maestro.ContainerApp.Actors
             return Context.Builds.FindAsync(buildId).AsTask();
         }
 
-        public Task RunProcessPendingUpdatesAsync()
-        {
-            return ActionRunner.ExecuteAction(() => ProcessPendingUpdatesAsync());
-        }
-
         /// <summary>
         ///     Process any pending pull request updates stored in the <see cref="PullRequestUpdate" />
         ///     actor state key.
@@ -203,8 +132,7 @@ namespace Maestro.ContainerApp.Actors
         ///     An <see cref="ActionResult{bool}" /> containing:
         ///     <see langword="true" /> if updates have been applied; <see langword="false" /> otherwise.
         /// </returns>
-        [ActionMethod("Processing pending updates")]
-        public async Task<ActionResult<bool>> ProcessPendingUpdatesAsync()
+        private async Task RunProcessPendingUpdatesAsync()
         {
             Logger.LogInformation("Processing pending updates");
             var maybeUpdates = JsonSerializer.Deserialize<List<UpdateAssetsParameters>>(await Db.StringGetAsync(PullRequestUpdateRedisKey));
@@ -212,7 +140,7 @@ namespace Maestro.ContainerApp.Actors
             if (updates == null || updates.Count < 1)
             {
                 Logger.LogInformation("No Pending Updates");
-                return ActionResult.Create(false, "No Pending Updates");
+                return;
             }
 
             (InProgressPullRequest pr, bool canUpdate) = await SynchronizeInProgressPullRequestAsync();
@@ -220,7 +148,7 @@ namespace Maestro.ContainerApp.Actors
             if (pr != null && !canUpdate)
             {
                 Logger.LogInformation($"PR {pr?.Url} cannot be updated.");
-                return ActionResult.Create(false, "PR cannot be updated.");
+                return;
             }
 
             string result;
@@ -246,7 +174,8 @@ namespace Maestro.ContainerApp.Actors
 
             await Db.KeyDeleteAsync(PullRequestUpdateRedisKey);
 
-            return ActionResult.Create(true, "Pending updates applied. " + result);
+            Logger.LogInformation("Pending updates applied. " + result);
+            return;
         }
 
         protected virtual Task TagSourceRepositoryGitHubContactsIfPossibleAsync(InProgressPullRequest pr)
@@ -279,7 +208,7 @@ namespace Maestro.ContainerApp.Actors
                     return (null, false);
                 }
 
-                SynchronizePullRequestResult result = await ActionRunner.ExecuteAction(() => SynchronizePullRequestAsync(pr.Url));
+                SynchronizePullRequestResult result = await SynchronizePullRequestAsync(pr.Url);
 
                 switch (result)
                 {
@@ -314,8 +243,7 @@ namespace Maestro.ContainerApp.Actors
         /// <returns>
         ///    Result of the synchronization
         /// </returns>
-        [ActionMethod("Synchronizing Pull Request: '{url}'")]
-        private async Task<ActionResult<SynchronizePullRequestResult>> SynchronizePullRequestAsync(string prUrl)
+        private async Task<SynchronizePullRequestResult> SynchronizePullRequestAsync(string prUrl)
         {
             Logger.LogInformation($"Synchronizing Pull Request {prUrl}");
             var maybePr =
@@ -323,9 +251,7 @@ namespace Maestro.ContainerApp.Actors
             if (maybePr == null || maybePr.Url != prUrl)
             {
                 Logger.LogInformation($"Not Applicable: Pull Request '{prUrl}' is not tracked by maestro anymore.");
-                return ActionResult.Create(
-                    SynchronizePullRequestResult.UnknownPR,
-                    $"Not Applicable: Pull Request '{prUrl}' is not tracked by maestro anymore.");
+                return SynchronizePullRequestResult.UnknownPR;
             }
 
             (string targetRepository, _) = await GetTargetAsync();
@@ -341,10 +267,10 @@ namespace Maestro.ContainerApp.Actors
                 // merge the PR if they are successful.
                 case PrStatus.Open:
                     Logger.LogInformation($"Status open for: {prUrl}");
-                    ActionResult<MergePolicyCheckResult> checkPolicyResult = await CheckMergePolicyAsync(pr, darc);
-                    pr.MergePolicyResult = checkPolicyResult.Result;
+                    MergePolicyCheckResult checkPolicyResult = await CheckMergePolicyAsync(pr, darc);
+                    pr.MergePolicyResult = checkPolicyResult;
 
-                    switch (checkPolicyResult.Result)
+                    switch (checkPolicyResult)
                     {
                         case MergePolicyCheckResult.Merged:
                             await UpdateSubscriptionsForMergedPRAsync(pr.ContainedSubscriptions);
@@ -352,20 +278,20 @@ namespace Maestro.ContainerApp.Actors
                                 pr.ContainedSubscriptions,
                                 DependencyFlowEventType.Completed,
                                 DependencyFlowEventReason.AutomaticallyMerged,
-                                checkPolicyResult.Result,
+                                checkPolicyResult,
                                 prUrl);
                             await Db.KeyDeleteAsync(PullRequestRedisKey);
-                            return ActionResult.Create(SynchronizePullRequestResult.Completed, checkPolicyResult.Message);
+                            return SynchronizePullRequestResult.Completed;
                         case MergePolicyCheckResult.FailedPolicies:
                             await TagSourceRepositoryGitHubContactsIfPossibleAsync(pr);
                             goto case MergePolicyCheckResult.FailedToMerge;
                         case MergePolicyCheckResult.NoPolicies:
                         case MergePolicyCheckResult.FailedToMerge:
-                            return ActionResult.Create(SynchronizePullRequestResult.InProgressCanUpdate, checkPolicyResult.Message);
+                            return SynchronizePullRequestResult.InProgressCanUpdate;
                         case MergePolicyCheckResult.PendingPolicies:
-                            return ActionResult.Create(SynchronizePullRequestResult.InProgressCannotUpdate, checkPolicyResult.Message);
+                            return SynchronizePullRequestResult.InProgressCannotUpdate;
                         default:
-                            throw new NotImplementedException($"Unknown merge policy check result {checkPolicyResult.Result}");
+                            throw new NotImplementedException($"Unknown merge policy check result {checkPolicyResult}");
                     }
                 case PrStatus.Merged:
                 case PrStatus.Closed:
@@ -398,7 +324,9 @@ namespace Maestro.ContainerApp.Actors
                     {
                         Logger.LogInformation(e, $"Failed to delete Branch associated with pull request {prUrl}");
                     }
-                    return ActionResult.Create(SynchronizePullRequestResult.Completed, $"PR Has been manually {status}");
+
+                    Logger.LogInformation($"PR Has been manually {status}");
+                    return SynchronizePullRequestResult.Completed;
                 default:
                     throw new NotImplementedException($"Unknown pr status '{status}'");
             }
@@ -410,7 +338,7 @@ namespace Maestro.ContainerApp.Actors
         /// <param name="prUrl">Pull request URL</param>
         /// <param name="darc">Darc remote</param>
         /// <returns>Result of the policy check.</returns>
-        private async Task<ActionResult<MergePolicyCheckResult>> CheckMergePolicyAsync(IPullRequest pr, IRemote darc)
+        private async Task<MergePolicyCheckResult> CheckMergePolicyAsync(IPullRequest pr, IRemote darc)
         {
             IReadOnlyList<MergePolicyDefinition> policyDefinitions = await GetMergePolicyDefinitions();
             MergePolicyEvaluationResults result = await MergePolicyEvaluator.EvaluateAsync(
@@ -423,13 +351,12 @@ namespace Maestro.ContainerApp.Actors
             if (result.Failed)
             {
                 Logger.LogInformation($"NOT Merged: PR '{pr.Url}' failed policies {string.Join(", ", result.Results.Where(r => r.Status != MergePolicyEvaluationStatus.Success).Select(r => r.MergePolicyInfo.Name + r.Title))}");
-                return ActionResult.Create(MergePolicyCheckResult.FailedPolicies,
-                    $"NOT Merged: PR '{pr.Url}' has failed policies {string.Join(", ", result.Results.Where(r => r.Status == MergePolicyEvaluationStatus.Failure).Select(r => r.MergePolicyInfo.Name + r.Title))}");
+                return MergePolicyCheckResult.FailedPolicies;
             }
             else if (result.Pending)
             {
-                return ActionResult.Create(MergePolicyCheckResult.PendingPolicies,
-                    $"NOT Merged: PR '{pr.Url}' has pending policies {string.Join(", ", result.Results.Where(r => r.Status == MergePolicyEvaluationStatus.Pending).Select(r => r.MergePolicyInfo.Name + r.Title))}");
+                Logger.LogInformation($"NOT Merged: PR '{pr.Url}' has pending policies {string.Join(", ", result.Results.Where(r => r.Status == MergePolicyEvaluationStatus.Pending).Select(r => r.MergePolicyInfo.Name + r.Title))}");
+                return MergePolicyCheckResult.PendingPolicies;
             }
             if (result.Succeeded)
             {
@@ -448,15 +375,13 @@ namespace Maestro.ContainerApp.Actors
                 {
                     string passedPolicies = string.Join(", ", policyDefinitions.Select(p => p.Name));
                     Logger.LogInformation($"Merged: PR '{pr.Url}' passed policies {passedPolicies}");
-                    return ActionResult.Create(
-                        MergePolicyCheckResult.Merged,
-                        $"Merged: PR '{pr.Url}' passed policies {passedPolicies}");
+                    return MergePolicyCheckResult.Merged;
                 }
                 Logger.LogInformation($"NOT Merged: PR '{pr.Url}' has merge conflicts.");
-                return ActionResult.Create(MergePolicyCheckResult.FailedToMerge, $"NOT Merged: PR '{pr.Url}' has merge conflicts.");
+                return MergePolicyCheckResult.FailedToMerge;
             }
             Logger.LogInformation($"NOT Merged: PR '{pr.Url}' There are no merge policies");
-            return ActionResult.Create(MergePolicyCheckResult.NoPolicies, "NOT Merged: There are no merge policies");
+            return MergePolicyCheckResult.NoPolicies;
         }
 
         /// <summary>
@@ -477,7 +402,7 @@ namespace Maestro.ContainerApp.Actors
             Logger.LogInformation("Updating subscriptions for merged PR");
             foreach (SubscriptionPullRequestUpdate update in subscriptionPullRequestUpdates)
             {
-                ISubscriptionActor actor = null; //= SubscriptionActorFactory.Lookup(new ActorId(update.SubscriptionId));
+                ISubscriptionActor actor = await ActorFactory.CreateSubscriptionActor(update.SubscriptionId);
                 if (!await actor.UpdateForMergedPullRequestAsync(update.BuildId))
                 {
                     Logger.LogInformation($"Failed to update subscription {update.SubscriptionId} for merged PR.");
@@ -496,7 +421,7 @@ namespace Maestro.ContainerApp.Actors
 
             foreach (SubscriptionPullRequestUpdate update in subscriptionPullRequestUpdates)
             {
-                ISubscriptionActor actor = null;// SubscriptionActorFactory.Lookup(new ActorId(update.SubscriptionId));
+                ISubscriptionActor actor = await ActorFactory.CreateSubscriptionActor(update.SubscriptionId);
                 if (!await actor.AddDependencyFlowEventAsync(update.BuildId, flowEvent, reason, policy, "PR", prUrl))
                 {
                     Logger.LogInformation($"Failed to add dependency flow event for {update.SubscriptionId}.");
@@ -522,8 +447,7 @@ namespace Maestro.ContainerApp.Actors
         ///     to pushing additional commits.
         /// </remarks>
         /// <returns></returns>
-        [ActionMethod("Updating assets for subscription: {subscriptionId}, build: {buildId}")]
-        public async Task<ActionResult<object>> UpdateAssetsAsync(
+        private async Task RunUpdateAssetsAsync(
             Guid subscriptionId,
             int buildId,
             string sourceRepo,
@@ -548,7 +472,7 @@ namespace Maestro.ContainerApp.Actors
                 {
                     var updateAssetsParametersList =
                         JsonSerializer.Deserialize<List<UpdateAssetsParameters>>(await Db.StringGetAsync(PullRequestUpdateRedisKey));
-                    if (updateAssetsParametersList != null )
+                    if (updateAssetsParametersList != null)
                     {
                         updateAssetsParametersList.Add(updateParameter);
                         await Db.StringSetAsync(PullRequestUpdateRedisKey, JsonSerializer.Serialize(updateAssetsParametersList));
@@ -559,26 +483,28 @@ namespace Maestro.ContainerApp.Actors
                             PullRequestUpdateRedisKey,
                             JsonSerializer.Serialize(new List<UpdateAssetsParameters> { updateParameter }));
                     }
-                    return ActionResult.Create<object>(
-                        null,
-                        $"Current Pull request '{pr.Url}' cannot be updated, update queued.");
+                    Logger.LogInformation($"Current Pull request '{pr.Url}' cannot be updated, update queued.");
+                    return;
                 }
 
                 if (pr != null)
                 {
                     await UpdatePullRequestAsync(pr, new List<UpdateAssetsParameters> { updateParameter });
-                    return ActionResult.Create<object>(null, $"Pull Request '{pr.Url}' updated.");
+                    Logger.LogInformation($"Pull Request '{pr.Url}' updated.");
+                    return;
                 }
 
                 string prUrl = await CreatePullRequestAsync(new List<UpdateAssetsParameters> { updateParameter });
                 if (prUrl == null)
                 {
-                    return ActionResult.Create<object>(null, "Updates require no changes, no pull request created.");
+                    Logger.LogInformation("Updates require no changes, no pull request created.");
+                    return;
                 }
 
-                return ActionResult.Create<object>(null, $"Pull request '{prUrl}' created.");
+                Logger.LogInformation($"Pull request '{prUrl}' created.");
+                return;
             }
-            catch (HttpRequestException reqEx) when (reqEx.Message.Contains(((int) HttpStatusCode.Unauthorized).ToString()))
+            catch (HttpRequestException reqEx) when (reqEx.Message.Contains(((int)HttpStatusCode.Unauthorized).ToString()))
             {
                 // We want to preserve the HttpRequestException's information but it's not serializable
                 // We'll log the full exception object so it's in Application Insights, and strip any single quotes from the message to ensure 
@@ -1015,11 +941,11 @@ namespace Maestro.ContainerApp.Actors
                     await UpdateSubscriptionsForMergedPRAsync(
                         new List<SubscriptionPullRequestUpdate>
                         {
-                            new SubscriptionPullRequestUpdate
-                            {
-                                SubscriptionId = update.SubscriptionId,
-                                BuildId = update.BuildId
-                            }
+                        new SubscriptionPullRequestUpdate
+                        {
+                            SubscriptionId = update.SubscriptionId,
+                            BuildId = update.BuildId
+                        }
                         });
                     continue;
                 }
@@ -1141,7 +1067,7 @@ namespace Maestro.ContainerApp.Actors
     ///     A <see cref="PullRequestActorImplementation" /> that reads its Merge Policies and Target information from a
     ///     non-batched subscription object
     /// </summary>
-    public class NonBatchedPullRequestActorImplementation : PullRequestActorImplementation
+    public class NonBatchedPullRequestActorImplementation : PullRequestActor
     {
         private readonly Lazy<Task<Subscription>> _lazySubscription;
         private readonly IPullRequestPolicyFailureNotifier _pullRequestPolicyFailureNotifier;
@@ -1150,17 +1076,17 @@ namespace Maestro.ContainerApp.Actors
             PullRequestActorId actorId,
             IMergePolicyEvaluator mergePolicyEvaluator,
             BuildAssetRegistryContext context,
+            IActorFactory actorFactory,
             IRemoteFactory darcFactory,
             ILoggerFactory loggerFactory,
-            IActionRunner actionRunner,
             IPullRequestPolicyFailureNotifier pullRequestPolicyFailureNotifier,
             IConnectionMultiplexer redis) : base(
                 actorId,
                 mergePolicyEvaluator,
                 context,
+                actorFactory,
                 darcFactory,
                 loggerFactory,
-                actionRunner,
                 redis)
         {
             _lazySubscription = new Lazy<Task<Subscription>>(RetrieveSubscription);
@@ -1200,7 +1126,7 @@ namespace Maestro.ContainerApp.Actors
         protected override async Task<IReadOnlyList<MergePolicyDefinition>> GetMergePolicyDefinitions()
         {
             Subscription subscription = await GetSubscription();
-            return (IReadOnlyList<MergePolicyDefinition>) subscription.PolicyObject.MergePolicies ??
+            return (IReadOnlyList<MergePolicyDefinition>)subscription.PolicyObject.MergePolicies ??
                    Array.Empty<MergePolicyDefinition>();
         }
 
@@ -1220,24 +1146,24 @@ namespace Maestro.ContainerApp.Actors
     ///     A <see cref="PullRequestActorImplementation" /> for batched subscriptions that reads its Target and Merge Policies
     ///     from the configuration for a repository
     /// </summary>
-    public class BatchedPullRequestActorImplementation : PullRequestActorImplementation
+    public class BatchedPullRequestActorImplementation : PullRequestActor
     {
         public BatchedPullRequestActorImplementation(
             PullRequestActorId actorId,
             IMergePolicyEvaluator mergePolicyEvaluator,
             BuildAssetRegistryContext context,
+            IActorFactory actorFactory,
             IRemoteFactory darcFactory,
             ILoggerFactory loggerFactory,
-            IActionRunner actionRunner,
             IConnectionMultiplexer redis)
             :
             base(
             actorId,
             mergePolicyEvaluator,
             context,
+            actorFactory,
             darcFactory,
             loggerFactory,
-            actionRunner,
             redis)
         {
         }
@@ -1253,7 +1179,7 @@ namespace Maestro.ContainerApp.Actors
         {
             RepositoryBranch repositoryBranch =
                 await Context.RepositoryBranches.FindAsync(Target.repository, Target.branch);
-            return (IReadOnlyList<MergePolicyDefinition>) repositoryBranch?.PolicyObject?.MergePolicies ??
+            return (IReadOnlyList<MergePolicyDefinition>)repositoryBranch?.PolicyObject?.MergePolicies ??
                    Array.Empty<MergePolicyDefinition>();
         }
     }
