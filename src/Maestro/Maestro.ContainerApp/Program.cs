@@ -23,15 +23,12 @@ builder.Services.AddLogging(b =>
 
 builder.AddBackgroudQueueProcessors();
 
-/// TODO: pass a connection string
-string connectionString = "";
 builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
 {
-    options.UseSqlServer(connectionString);
+    options.UseSqlServer(builder.GetConnectionString("BuildAssetRegistry"));
 });
 
-builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(
-    (DockerHelpers.IsDocker ? "host.docker.internal" : "127.0.0.1") + ":6379"));
+builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(builder.GetConnectionString("Redis")));
 
 var app = builder.Build();
 
