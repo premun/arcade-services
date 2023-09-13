@@ -13,11 +13,7 @@ internal static class QueueConfiguration
     {
         builder.Services.AddAzureClients(clientBuilder =>
         {
-            var configSection = DockerHelpers.IsDocker
-                ? builder.Configuration.GetSection("ConnectionStrings")
-                : builder.Configuration.GetSection("ConnectionStringsNonDocker");
-
-            clientBuilder.AddQueueServiceClient(configSection["AzureQueues"]);
+            clientBuilder.AddQueueServiceClient(builder.GetConnectionString("AzureQueues"));
             clientBuilder.ConfigureDefaults(options =>
             {
                 options.Diagnostics.IsLoggingEnabled = false;
