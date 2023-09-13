@@ -47,6 +47,7 @@ services:
       dockerfile: src/Maestro/Maestro.Data/docker/Dockerfile
     ports:
       - 1433:1433
+      - 1431:1431 
 
   redis:
     image: amd64/redis

@@ -25,19 +25,10 @@ builder.AddBackgroudQueueProcessors();
 
 builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
 {
-    var connectionStringSection = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true"
-        ? builder.Configuration.GetSection("ConnectionStrings")
-        : builder.Configuration.GetSection("ConnectionStringsNonDocker");
-
-    var connectionString = connectionStringSection["BuildAssetRegistry"];
-    if (connectionString != null)
-    {
-        options.UseSqlServer(connectionString);
-    } 
+    options.UseSqlServer(builder.GetConnectionString("BuildAssetRegistry"));
 });
 
-builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(
-    (DockerHelpers.IsDocker ? "host.docker.internal" : "127.0.0.1") + ":6379"));
+builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(builder.GetConnectionString("Redis")));
 
 var app = builder.Build();
 
