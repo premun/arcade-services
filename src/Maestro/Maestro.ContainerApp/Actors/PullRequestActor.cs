@@ -1,24 +1,16 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net;
-using System.Net.Http;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Maestro.ContainerApp.Actors.ActionRunner;
 using Maestro.Contracts;
 using Maestro.Data;
 using Maestro.Data.Models;
 using Maestro.MergePolicyEvaluation;
 using Microsoft.DotNet.DarcLib;
-using Microsoft.DotNet.GitHub.Authentication;
-using Microsoft.Extensions.Logging;
-using Microsoft.ServiceFabric.Actors;
 using StackExchange.Redis;
 using Asset = Maestro.Contracts.Asset;
 using AssetData = Microsoft.DotNet.Maestro.Client.Models.AssetData;
