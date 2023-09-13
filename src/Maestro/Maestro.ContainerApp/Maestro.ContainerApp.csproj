@@ -18,7 +18,7 @@
     <PackageReference Include="Microsoft.Extensions.Azure" />
     <PackageReference Include="Microsoft.AspNetCore.ApiPagination" />
     <PackageReference Include="Microsoft.AspNetCore.ApiVersioning" />
-    <!-- <PackageReference Include="Microsoft.AspNetCore.ApiVersioning.Swashbuckle" /> -->
+    <!--<PackageReference Include="Microsoft.AspNetCore.ApiVersioning.Swashbuckle" />-->
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
     <PackageReference Include="NRedisStack" />
