@@ -4,19 +4,26 @@
 using System.Text.Json;
 using Azure.Storage.Queues;
 using Azure.Storage.Queues.Models;
+using Maestro.ContainerApp.Queues.QueueProcessors;
 using Maestro.ContainerApp.Queues.WorkItems;
 
 namespace Maestro.ContainerApp.Queues;
 
-internal class BackgroundQueueProcessor : BackgroundService
+internal class BackgroundQueueListener : BackgroundService
 {
     private readonly QueueServiceClient _queueClient;
+    private readonly IServiceProvider _serviceProvider;
     private readonly string _queueName;
     private readonly ILogger _logger;
 
-    public BackgroundQueueProcessor(QueueServiceClient queueClient, ILogger<BackgroundQueueProcessor> logger, string queueName)
+    public BackgroundQueueListener(
+        QueueServiceClient queueClient,
+        IServiceProvider serviceProvider,
+        ILogger<BackgroundQueueListener> logger,
+        string queueName)
     {
         _queueClient = queueClient;
+        _serviceProvider = serviceProvider;
         _queueName = queueName;
         _logger = logger;
     }
@@ -49,7 +56,7 @@ internal class BackgroundQueueProcessor : BackgroundService
             {
                 BackgroundWorkItem item = JsonSerializer.Deserialize<BackgroundWorkItem>(message.Body)
                     ?? throw new InvalidOperationException("Empty message queue received");
-                await ProcessItemAsync(item);
+                await ProcessItemAsync(item, cancellationToken);
                 await client.DeleteMessageAsync(message.MessageId, message.PopReceipt, cancellationToken);
             }
             catch (Exception e)
@@ -59,8 +66,7 @@ internal class BackgroundQueueProcessor : BackgroundService
         }
     }
 
-    /// TODO: do work
-    private Task ProcessItemAsync(BackgroundWorkItem item)
+    private async Task ProcessItemAsync(BackgroundWorkItem item, CancellationToken cancellationToken)
     {
         switch (item)
         {
@@ -73,8 +79,12 @@ internal class BackgroundQueueProcessor : BackgroundService
             case CheckDailySubscriptionsWorkItem action:
                 _logger.LogInformation($"Processing { nameof(CheckDailySubscriptionsWorkItem) }");
                 break;
+            case BuildCoherencyInfoWorkItem action:
+                var processor = _serviceProvider.GetRequiredService<BuildCoherencyInfoQueueProcessor>();
+                await processor.ProcessAsync(action, CancellationToken.None);
+                break;
+            default:
+                throw new NotImplementedException($"Unknown work item type: {item.GetType().Name}");
         }
-
-        return Task.CompletedTask;
     }
 }

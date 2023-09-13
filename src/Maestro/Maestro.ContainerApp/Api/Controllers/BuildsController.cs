@@ -8,7 +8,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
-using Newtonsoft.Json.Linq;
 using Maestro.ContainerApp.Utils;
 using Maestro.ContainerApp.Api.Models;
 using Maestro.ContainerApp.Queues;
@@ -24,18 +23,18 @@ namespace Maestro.ContainerApp.Api.Controllers;
 [ApiVersion("Latest")]
 public class BuildsController : ControllerBase
 {
-    protected BuildAssetRegistryContext DBContext { get; }
-    private ILogger<BuildsController> Logger { get; }
-    private QueueProducerFactory Queue { get; }
+    private readonly BuildAssetRegistryContext _dbContext;
+    private readonly QueueProducerFactory _queue;
+    private readonly IRemoteFactory _remoteFactory;
 
     public BuildsController(
         BuildAssetRegistryContext context,
-        ILogger<BuildsController> logger,
-        QueueProducerFactory queueClientFactory)
+        QueueProducerFactory queueClientFactory,
+        IRemoteFactory remoteFactory)
     {
-        DBContext = context;
-        Logger = logger;
-        Queue = queueClientFactory;
+        _dbContext = context;
+        _queue = queueClientFactory;
+        _remoteFactory = remoteFactory;
     }
 
     /// <summary>
@@ -91,7 +90,7 @@ public class BuildsController : ControllerBase
     public async Task<IActionResult> GetBuild(int id)
     {
         //_logger.LogInformation("# inside");
-        Data.Models.Build? build = build = await DBContext.Builds.Where(b => b.Id == id)
+        Data.Models.Build? build = build = await _dbContext.Builds.Where(b => b.Id == id)
             .Include(b => b.BuildChannels)
             .ThenInclude(bc => bc.Channel)
             .Include(b => b.Assets)
@@ -102,7 +101,7 @@ public class BuildsController : ControllerBase
             return NotFound();
         }
 
-        List<Data.Models.BuildDependency> dependentBuilds = DBContext.BuildDependencies.Where(b => b.BuildId == id).ToList();
+        List<Data.Models.BuildDependency> dependentBuilds = _dbContext.BuildDependencies.Where(b => b.BuildId == id).ToList();
         build.DependentBuildIds = dependentBuilds;
 
         return Ok(new Build(build));
@@ -113,14 +112,14 @@ public class BuildsController : ControllerBase
     [ValidateModelState]
     public async Task<IActionResult> GetBuildGraph(int id)
     {
-        Data.Models.Build? build = await DBContext.Builds.Include(b => b.Incoherencies).FirstOrDefaultAsync(b => b.Id == id);
+        Data.Models.Build? build = await _dbContext.Builds.Include(b => b.Incoherencies).FirstOrDefaultAsync(b => b.Id == id);
 
         if (build == null)
         {
             return NotFound();
         }
 
-        var builds = await DBContext.GetBuildGraphAsync(build.Id);
+        var builds = await _dbContext.GetBuildGraphAsync(build.Id);
 
         return Ok(BuildGraph.Create(builds.Select(b => new Build(b))));
     }
@@ -172,16 +171,15 @@ public class BuildsController : ControllerBase
     [ValidateModelState]
     public async Task<IActionResult> GetCommit(int buildId)
     {
-        Data.Models.Build? build = await DBContext.Builds.Include(b => b.Incoherencies).FirstOrDefaultAsync(b => b.Id == buildId);
+        Data.Models.Build? build = await _dbContext.Builds.Include(b => b.Incoherencies).FirstOrDefaultAsync(b => b.Id == buildId);
         if (build == null)
         {
             return NotFound();
         }
 
-        //IRemote remote = await Factory.GetRemoteAsync(build.AzureDevOpsRepository ?? build.GitHubRepository, null);
-        //Microsoft.DotNet.DarcLib.Commit commit = await remote.GetCommitAsync(build.AzureDevOpsRepository ?? build.GitHubRepository, build.Commit);
-        //return Ok(new Models.Commit(commit.Author, commit.Sha, commit.Message));
-        throw new Exception("not implemented");
+        IRemote remote = await _remoteFactory.GetRemoteAsync(build.AzureDevOpsRepository ?? build.GitHubRepository, null);
+        Microsoft.DotNet.DarcLib.Commit commit = await remote.GetCommitAsync(build.AzureDevOpsRepository ?? build.GitHubRepository, build.Commit);
+        return Ok(new Models.Commit(commit.Author, commit.Sha, commit.Message));
     }
 
     [HttpPatch("{buildId}")]
@@ -189,7 +187,7 @@ public class BuildsController : ControllerBase
     [ValidateModelState]
     public virtual async Task<IActionResult> Update(int buildId, [FromBody, Required] BuildUpdate buildUpdate)
     {
-        Data.Models.Build? build = await DBContext.Builds.Where(b => b.Id == buildId).FirstOrDefaultAsync();
+        Data.Models.Build? build = await _dbContext.Builds.Where(b => b.Id == buildId).FirstOrDefaultAsync();
 
         if (build == null)
         {
@@ -205,11 +203,11 @@ public class BuildsController : ControllerBase
 
         if (doUpdate)
         {
-            DBContext.Builds.Update(build);
-            await DBContext.SaveChangesAsync();
+            _dbContext.Builds.Update(build);
+            await _dbContext.SaveChangesAsync();
         }
 
-        return Ok(new Models.Build(build));
+        return Ok(new Build(build));
     }
 
     /// <summary>
@@ -240,7 +238,7 @@ public class BuildsController : ControllerBase
                 // of the current build. If we find a match in the BuildDependencies table, it means
                 // that this is not a new dependency, and we should use the TimeToInclusionInMinutes
                 // of the previous time this dependency was added.
-                var buildDependency = await DBContext.BuildDependencies.FirstOrDefaultAsync(d =>
+                var buildDependency = await _dbContext.BuildDependencies.FirstOrDefaultAsync(d =>
                     d.DependentBuildId == dep.BuildId &&
                     d.Build.GitHubRepository == buildModel.GitHubRepository &&
                     d.Build.GitHubBranch == buildModel.GitHubBranch &&
@@ -262,14 +260,14 @@ public class BuildsController : ControllerBase
                     // 2. Find the entry in BuildChannels and get the insert time
                     // In certain corner cases, we may pick the wrong subscription or BuildChannel
 
-                    Data.Models.Build? depBuild = await DBContext.Builds.FindAsync(dep.BuildId);
+                    Data.Models.Build? depBuild = await _dbContext.Builds.FindAsync(dep.BuildId);
                     if (depBuild is null) throw new Exception("TODO: this must be improved");
 
                     // If we don't find a subscription or a BuildChannel entry, use the dependency's
                     // date produced.
                     DateTimeOffset startTime = depBuild.DateProduced;
 
-                    Data.Models.Subscription? subscription = await DBContext.Subscriptions.FirstOrDefaultAsync(s =>
+                    Data.Models.Subscription? subscription = await _dbContext.Subscriptions.FirstOrDefaultAsync(s =>
                         (s.SourceRepository == depBuild.GitHubRepository ||
                          s.SourceRepository == depBuild.AzureDevOpsRepository) &&
                         (s.TargetRepository == buildModel.GitHubRepository ||
@@ -280,7 +278,7 @@ public class BuildsController : ControllerBase
 
                     if (subscription != null)
                     {
-                        Data.Models.BuildChannel? buildChannel = await DBContext.BuildChannels.FirstOrDefaultAsync(bc =>
+                        Data.Models.BuildChannel? buildChannel = await _dbContext.BuildChannels.FirstOrDefaultAsync(bc =>
                             bc.BuildId == depBuild.Id &&
                             bc.ChannelId == subscription.ChannelId
                         );
@@ -295,7 +293,7 @@ public class BuildsController : ControllerBase
                 }
             }
 
-            await DBContext.BuildDependencies.AddRangeAsync(
+            await _dbContext.BuildDependencies.AddRangeAsync(
                 build.Dependencies.Select(
                     b => new Data.Models.BuildDependency
                     {
@@ -306,14 +304,16 @@ public class BuildsController : ControllerBase
                     }));
         }
 
-        await DBContext.Builds.AddAsync(buildModel);
-        await DBContext.SaveChangesAsync();
+        await _dbContext.Builds.AddAsync(buildModel);
+        await _dbContext.SaveChangesAsync();
 
         // Compute the dependency incoherencies of the build.
         // Since this might be an expensive operation we do it asynchronously.
-
-        /// Uncomment
-        //Queue.Post<BuildCoherencyInfoWorkItem>(JToken.FromObject(buildModel.Id));
+        var queueClient = _queue.Create<BuildCoherencyInfoWorkItem>();
+        await queueClient.SendAsync(new BuildCoherencyInfoWorkItem
+        {
+            BuildId = buildModel.Id
+        });
 
         return CreatedAtRoute(
             new
@@ -321,72 +321,7 @@ public class BuildsController : ControllerBase
                 action = "GetBuild",
                 id = buildModel.Id
             },
-            new Models.Build(buildModel));
-    }
-
-    private class BuildCoherencyInfoWorkItem : BackgroundWorkItem
-    {
-        private BuildAssetRegistryContext DBContext { get; }
-        private IRemoteFactory RemoteFactory { get; }
-        private ILogger<BuildCoherencyInfoWorkItem> Logger { get; }
-
-        public BuildCoherencyInfoWorkItem(BuildAssetRegistryContext context, IRemoteFactory remoteFactory, ILogger<BuildCoherencyInfoWorkItem> logger)
-        {
-            DBContext = context;
-            RemoteFactory = remoteFactory;
-            Logger = logger;
-        }
-
-        public async Task ProcessAsync(JToken argumentToken)
-        {
-            // This method is called asynchronously whenever a new build is inserted in BAR.
-            // It's goal is to compute the incoherent dependencies that the build have and
-            // persist the list of them in BAR.
-
-            int buildId = argumentToken.Value<int>();
-            DependencyGraphBuildOptions graphBuildOptions = new DependencyGraphBuildOptions()
-            {
-                IncludeToolset = false,
-                LookupBuilds = false,
-                NodeDiff = NodeDiff.None
-            };
-
-            try
-            {
-                Data.Models.Build? build = await DBContext.Builds.FindAsync(buildId);
-                if (build is null) throw new Exception("TODO: this must be improved");
-
-                DependencyGraph graph = await DependencyGraph.BuildRemoteDependencyGraphAsync(
-                    RemoteFactory,
-                    build.GitHubRepository ?? build.AzureDevOpsRepository,
-                    build.Commit,
-                    graphBuildOptions,
-                    Logger);
-
-                var incoherencies = new List<Data.Models.BuildIncoherence>();
-
-                foreach (var incoherence in graph.IncoherentDependencies)
-                {
-                    incoherencies.Add(new Data.Models.BuildIncoherence
-                    {
-                        Name = incoherence.Name,
-                        Version = incoherence.Version,
-                        Repository = incoherence.RepoUri,
-                        Commit = incoherence.Commit
-                    });
-                }
-
-                DBContext.Entry(build).Reload();
-                build.Incoherencies = incoherencies;
-
-                DBContext.Builds.Update(build);
-                await DBContext.SaveChangesAsync();
-            }
-            catch (Exception e)
-            {
-                Logger.LogWarning(e, $"Problems computing the dependency incoherencies for BAR build {buildId}");
-            }
-        }
+            new Build(buildModel));
     }
 
     protected IQueryable<Data.Models.Build> Query(
@@ -401,7 +336,7 @@ public class BuildsController : ControllerBase
         DateTimeOffset? notAfter,
         bool? loadCollections)
     {
-        IQueryable<Data.Models.Build> query = DBContext.Builds;
+        IQueryable<Data.Models.Build> query = _dbContext.Builds;
         if (!string.IsNullOrEmpty(repository))
         {
             query = query.Where(b => (repository == b.GitHubRepository || repository == b.AzureDevOpsRepository));
