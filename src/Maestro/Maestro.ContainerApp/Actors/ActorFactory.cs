@@ -34,6 +34,6 @@ public class ActorFactory : IActorFactory
 
     public ISubscriptionActor CreateSubscriptionActor(Guid subscriptionId)
     {
-        throw new NotImplementedException();
+        return ActivatorUtilities.CreateInstance<SubscriptionActor>(_serviceProvider, subscriptionId);
     }
 }
