@@ -18,9 +18,11 @@ using Maestro.MergePolicyEvaluation;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.GitHub.Authentication;
 using Microsoft.Extensions.Logging;
+using Microsoft.ServiceFabric.Actors;
 using StackExchange.Redis;
 using Asset = Maestro.Contracts.Asset;
 using AssetData = Microsoft.DotNet.Maestro.Client.Models.AssetData;
+using PullRequestActorId = Maestro.ContainerApp.Actors.PullRequestActorId;
 
 #nullable disable
 
@@ -102,6 +104,7 @@ namespace Maestro.ContainerApp.Actors
         public const string DependencyUpdateEnd = "[DependencyUpdate]: <> (End)";
 
         protected PullRequestActorImplementation(
+            PullRequestActorId actorId,
             IMergePolicyEvaluator mergePolicyEvaluator,
             BuildAssetRegistryContext context,
             IRemoteFactory darcFactory,
@@ -117,9 +120,10 @@ namespace Maestro.ContainerApp.Actors
             Logger = loggerFactory.CreateLogger(GetType());
             Redis = redis;
             Db = redis.GetDatabase();
-            PullRequestRedisKey = PullRequest + SubscriptionId;
-            PullRequestUpdateRedisKey = PullRequest + SubscriptionId;
-            PullRequestCheckRedisKey = PullRequestCheck + SubscriptionId;
+            ActorId = actorId;
+            PullRequestRedisKey = PullRequest + ActorId.Id;
+            PullRequestUpdateRedisKey = PullRequest + ActorId.Id;
+            PullRequestCheckRedisKey = PullRequestCheck + ActorId.Id;
         }
 
         public ILogger Logger { get; }
@@ -130,9 +134,7 @@ namespace Maestro.ContainerApp.Actors
         public IActionRunner ActionRunner { get; }
         public IConnectionMultiplexer Redis { get; }
         public IDatabase Db { get; }
-        public string SubscriptionId { get; } = string.Empty;
-        public string Repository { get; } = string.Empty;
-        public string Branch { get; } = string.Empty;
+        public PullRequestActorId ActorId { get; }
         public string PullRequestRedisKey { get; }
         public string PullRequestUpdateRedisKey { get; }
         public string PullRequestCheckRedisKey { get; }
@@ -213,7 +215,7 @@ namespace Maestro.ContainerApp.Actors
         public async Task<ActionResult<bool>> ProcessPendingUpdatesAsync()
         {
             Logger.LogInformation("Processing pending updates");
-            var maybeUpdates = JsonSerializer.Deserialize<List<UpdateAssetsParameters>>(await Db.StringGetAsync(PullRequestUpdate + SubscriptionId));
+            var maybeUpdates = JsonSerializer.Deserialize<List<UpdateAssetsParameters>>(await Db.StringGetAsync(PullRequestUpdateRedisKey));
             List<UpdateAssetsParameters> updates = maybeUpdates != null ? maybeUpdates : null;
             if (updates == null || updates.Count < 1)
             {
@@ -250,7 +252,7 @@ namespace Maestro.ContainerApp.Actors
                 Logger.LogInformation(result);
             }
 
-            await Db.KeyDeleteAsync(PullRequestUpdate + SubscriptionId);
+            await Db.KeyDeleteAsync(PullRequestUpdateRedisKey);
 
             return ActionResult.Create(true, "Pending updates applied. " + result);
         }
@@ -720,7 +722,7 @@ namespace Maestro.ContainerApp.Actors
                         prUrl);
 
 
-                    await Db.StringSetAsync(PullRequest + SubscriptionId, JsonSerializer.Serialize(inProgressPr));
+                    await Db.StringSetAsync(PullRequestRedisKey, JsonSerializer.Serialize(inProgressPr));
                     return prUrl;
                 }
 
@@ -928,7 +930,7 @@ namespace Maestro.ContainerApp.Actors
             pullRequest.Title = await ComputePullRequestTitleAsync(pr, targetBranch);
             await darcRemote.UpdatePullRequestAsync(pr.Url, pullRequest);
 
-            await Db.StringSetAsync(PullRequest + SubscriptionId, JsonSerializer.Serialize(pr));
+            await Db.StringSetAsync(PullRequestRedisKey, JsonSerializer.Serialize(pr));
         }
 
 
@@ -1153,6 +1155,7 @@ namespace Maestro.ContainerApp.Actors
         private readonly IPullRequestPolicyFailureNotifier _pullRequestPolicyFailureNotifier;
 
         public NonBatchedPullRequestActorImplementation(
+            PullRequestActorId actorId,
             IMergePolicyEvaluator mergePolicyEvaluator,
             BuildAssetRegistryContext context,
             IRemoteFactory darcFactory,
@@ -1160,6 +1163,7 @@ namespace Maestro.ContainerApp.Actors
             IActionRunner actionRunner,
             IPullRequestPolicyFailureNotifier pullRequestPolicyFailureNotifier,
             IConnectionMultiplexer redis) : base(
+                actorId,
                 mergePolicyEvaluator,
                 context,
                 darcFactory,
@@ -1175,12 +1179,12 @@ namespace Maestro.ContainerApp.Actors
 
         private async Task<Subscription> RetrieveSubscription()
         {
-            Subscription subscription = await Context.Subscriptions.FindAsync(SubscriptionId);
+            Subscription subscription = await Context.Subscriptions.FindAsync(ActorId.Id);
             if (subscription == null)
             {
                 await Db.KeyDeleteAsync(PullRequestRedisKey);
 
-                throw new SubscriptionException($"Subscription '{SubscriptionId}' was not found...");
+                throw new SubscriptionException($"Subscription '{ActorId.Id}' was not found...");
             }
 
             return subscription;
@@ -1227,6 +1231,7 @@ namespace Maestro.ContainerApp.Actors
     public class BatchedPullRequestActorImplementation : PullRequestActorImplementation
     {
         public BatchedPullRequestActorImplementation(
+            PullRequestActorId actorId,
             IMergePolicyEvaluator mergePolicyEvaluator,
             BuildAssetRegistryContext context,
             IRemoteFactory darcFactory,
@@ -1235,6 +1240,7 @@ namespace Maestro.ContainerApp.Actors
             IConnectionMultiplexer redis)
             :
             base(
+            actorId,
             mergePolicyEvaluator,
             context,
             darcFactory,
@@ -1244,7 +1250,7 @@ namespace Maestro.ContainerApp.Actors
         {
         }
 
-        private (string repository, string branch) Target => (Repository, Branch);
+        private (string repository, string branch) Target => ActorId.Parse();
 
         protected override Task<(string repository, string branch)> GetTargetAsync()
         {
