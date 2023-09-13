@@ -59,12 +59,19 @@ internal class BackgroundQueueProcessor : BackgroundService
         }
     }
 
+    /// TODO: do work
     private Task ProcessItemAsync(BackgroundWorkItem item)
     {
         switch (item)
         {
             case StartSubscriptionUpdateWorkItem startSubscriptionUpdate:
-                _logger.LogInformation($"Processing {nameof(StartSubscriptionUpdateWorkItem)}: {startSubscriptionUpdate.SubscriptionId}");
+                _logger.LogInformation($"Processing { nameof(StartSubscriptionUpdateWorkItem) }: { startSubscriptionUpdate.SubscriptionId }");
+                break;
+            case SubscriptionActorActionWorkItem action:
+                _logger.LogInformation($"Processing { nameof(SubscriptionActorActionWorkItem) }: { action.Subscriptionid }, { action.Method }, { action.MethodArguments }");
+                break;
+            case CheckDailySubscriptionsWorkItem action:
+                _logger.LogInformation($"Processing { nameof(CheckDailySubscriptionsWorkItem) }");
                 break;
         }
 
