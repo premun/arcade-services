@@ -21,7 +21,7 @@ using AssetData = Microsoft.DotNet.Maestro.Client.Models.AssetData;
 
 namespace Maestro.ContainerApp.Actors
 {
-    public abstract class PullRequestActor : IPullRequestActor, IActionTracker
+    public abstract class PullRequestActor : IPullRequestActor
     {
         public const string PullRequestCheck = "pullRequestCheck";
         public const string PullRequestUpdate = "pullRequestUpdate";
@@ -64,30 +64,6 @@ namespace Maestro.ContainerApp.Actors
         public string PullRequestRedisKey { get; }
         public string PullRequestUpdateRedisKey { get; }
         public string PullRequestCheckRedisKey { get; }
-
-        public async Task TrackSuccessfulAction(string action, string result)
-        {
-            RepositoryBranchUpdate update = await GetRepositoryBranchUpdate();
-
-            update.Action = action;
-            update.ErrorMessage = result;
-            update.Method = null;
-            update.Arguments = null;
-            update.Success = true;
-            await Context.SaveChangesAsync();
-        }
-
-        public async Task TrackFailedAction(string action, string result, string method, string arguments)
-        {
-            RepositoryBranchUpdate update = await GetRepositoryBranchUpdate();
-
-            update.Action = action;
-            update.ErrorMessage = result;
-            update.Method = method;
-            update.Arguments = arguments;
-            update.Success = false;
-            await Context.SaveChangesAsync();
-        }
 
         /// <summary>
         ///     Applies or queues asset updates for the target repository and branch from the given build and list of assets.
