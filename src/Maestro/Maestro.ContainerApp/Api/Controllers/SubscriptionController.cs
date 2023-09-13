@@ -12,7 +12,6 @@ using Microsoft.AspNetCore.ApiVersioning;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.DotNet.GitHub.Authentication;
-using Maestro.ContainerApp.Actors;
 
 namespace Maestro.ContainerApp.Api.Controllers;
 
@@ -24,7 +23,6 @@ namespace Maestro.ContainerApp.Api.Controllers;
 public class SubscriptionsController : Controller
 {
     public const string RequiredOrgForSubscriptionNotification = "microsoft";
-    private readonly IActorFactory _actorFactory;
 
     private BuildAssetRegistryContext DBContext { get; }
     private QueueProducerFactory Queue { get; }
@@ -33,13 +31,11 @@ public class SubscriptionsController : Controller
     public SubscriptionsController(
         BuildAssetRegistryContext context,
         QueueProducerFactory queue,
-        IGitHubClientFactory gitHubClientFactory,
-        IActorFactory actorFactory)
+        IGitHubClientFactory gitHubClientFactory)
     {
         DBContext = context;
         Queue = queue;
         GitHubClientFactory = gitHubClientFactory;
-        _actorFactory = actorFactory;
     }
 
     /// <summary>
@@ -58,8 +54,6 @@ public class SubscriptionsController : Controller
         int? channelId = null,
         bool? enabled = null)
     {
-        _actorFactory.CreateSubscriptionActor(Guid.NewGuid());
-
         IQueryable<Data.Models.Subscription> query = DBContext.Subscriptions
             .Include(s => s.Channel)
             .Include(s => s.LastAppliedBuild);
