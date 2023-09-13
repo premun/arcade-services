@@ -9,14 +9,11 @@ using Maestro.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Console;
 using StackExchange.Redis;
-<<<<<<< HEAD
-=======
 using Maestro.ContainerApp.Queues;
 using Microsoft.EntityFrameworkCore;
 using Maestro.ContainerApp.Utils;
 using Microsoft.DotNet.DarcLib;
 using SubscriptionActorService;
->>>>>>> 28bd0711 (WIP - Porting the DarcRemoteFactory)
 
 var builder = WebApplication.CreateBuilder(args);
 
