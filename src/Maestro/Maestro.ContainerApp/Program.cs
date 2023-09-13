@@ -3,9 +3,11 @@
 
 using Maestro.ContainerApp;
 using Maestro.ContainerApp.Actors;
+using Maestro.ContainerApp.Api.Controllers;
 using Maestro.ContainerApp.Queues;
 using Maestro.ContainerApp.Utils;
 using Maestro.Data;
+using Microsoft.DotNet.GitHub.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Console;
 using StackExchange.Redis;
@@ -24,13 +26,17 @@ builder.Services.AddLogging(b =>
 
 builder.AddBackgroudQueueProcessors();
 builder.AddActors();
+builder.AddControllerConfigurations();
 
 builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
 {
     options.UseSqlServer(builder.GetConnectionString("BuildAssetRegistry"));
 });
+builder.Services.AddSingleton<IInstallationLookup, BuildAssetRegistryInstallationLookup>();
 
+// singleton services
 builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(builder.GetConnectionString("Redis")));
+builder.Services.AddSingleton<TemporaryFiles>();
 
 var app = builder.Build();
 
