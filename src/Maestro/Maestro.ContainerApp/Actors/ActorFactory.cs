@@ -7,10 +7,10 @@ namespace Maestro.ContainerApp.Actors;
 
 public interface IActorFactory
 {
-    Task<IPullRequestActor> CreatePullRequestActor(string repository, string branch);
-    Task<IPullRequestActor> CreatePullRequestActor(Guid subscriptionId);
+    IPullRequestActor CreatePullRequestActor(string repository, string branch);
+    IPullRequestActor CreatePullRequestActor(Guid subscriptionId);
 
-    Task<ISubscriptionActor> CreateSubscriptionActor(Guid subscriptionId);
+    ISubscriptionActor CreateSubscriptionActor(Guid subscriptionId);
 }
 
 public class ActorFactory : IActorFactory
@@ -22,18 +22,18 @@ public class ActorFactory : IActorFactory
         _serviceProvider = serviceProvider;
     }
 
-    public Task<IPullRequestActor> CreatePullRequestActor(string repository, string branch)
+    public IPullRequestActor CreatePullRequestActor(string repository, string branch)
     {
-        return Task.FromResult<IPullRequestActor>(_serviceProvider.GetRequiredService<BatchedPullRequestActorImplementation>());
+        return ActivatorUtilities.CreateInstance<BatchedPullRequestActor>(_serviceProvider, new PullRequestActorId(repository, branch));
     }
 
-    public Task<IPullRequestActor> CreatePullRequestActor(Guid subscriptionId)
+    public IPullRequestActor CreatePullRequestActor(Guid subscriptionId)
     {
-        return Task.FromResult<IPullRequestActor>(_serviceProvider.GetRequiredService<NonBatchedPullRequestActorImplementation>());
+        return ActivatorUtilities.CreateInstance<NonBatchedPullRequestActor>(_serviceProvider, new PullRequestActorId(subscriptionId));
     }
 
-    public Task<ISubscriptionActor> CreateSubscriptionActor(Guid subscriptionId)
+    public ISubscriptionActor CreateSubscriptionActor(Guid subscriptionId)
     {
-        throw new NotImplementedException();
+        return ActivatorUtilities.CreateInstance<SubscriptionActor>(_serviceProvider, subscriptionId);
     }
 }

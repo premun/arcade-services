@@ -63,7 +63,7 @@ public class SubscriptionActor : ISubscriptionActor
 
         _logger.LogInformation($"Creating pull request actor for '{pullRequestActorId}'");
 
-        IPullRequestActor pullRequestActor = await _actorFactory.CreatePullRequestActor(_subscriptionId);
+        IPullRequestActor pullRequestActor = _actorFactory.CreatePullRequestActor(_subscriptionId);
 
         List<Asset> assets = build.Assets.Select(
                 a => new Asset
