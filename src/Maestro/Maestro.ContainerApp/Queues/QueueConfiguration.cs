@@ -24,7 +24,7 @@ internal static class QueueConfiguration
             ?? throw new ArgumentException("Please configure the BackgroundQueueName setting");
 
         builder.Services.AddHostedService(sp
-            => ActivatorUtilities.CreateInstance<BackgroundQueueProcessor>(sp, backgroundQueueName));
+            => ActivatorUtilities.CreateInstance<BackgroundQueueListener>(sp, backgroundQueueName));
         builder.Services.TryAddTransient(sp
             => ActivatorUtilities.CreateInstance<QueueProducerFactory>(sp, backgroundQueueName));
     }
