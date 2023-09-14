@@ -117,6 +117,13 @@ public class SubscriptionsController : Controller
         return await TriggerSubscriptionCore(id, buildId);
     }
 
+    [HttpPost("/test-trigger")]
+    [ValidateModelState]
+    public async Task<IActionResult> TriggerTestSubscription()
+    {
+        return await TriggerSubscriptionCore(new Guid("0bf57238-1f9d-430b-23b8-08dbb4fecd36"), 0);
+    }
+
     protected async Task<IActionResult> TriggerSubscriptionCore(Guid id, int buildId)
     {
         Data.Models.Subscription? subscription = await DBContext.Subscriptions.Include(sub => sub.LastAppliedBuild)
