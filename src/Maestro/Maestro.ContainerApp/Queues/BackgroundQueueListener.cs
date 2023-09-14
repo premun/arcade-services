@@ -90,8 +90,11 @@ internal class BackgroundQueueListener : BackgroundService
                 }
 
             case SubscriptionActorActionWorkItem action:
-                _logger.LogInformation($"Processing { nameof(SubscriptionActorActionWorkItem) }: { action.Subscriptionid }, { action.Method }, { action.MethodArguments }");
-                break;
+                {
+                    var processor = scope.ServiceProvider.GetRequiredService<SubscriptionActorActionQueueProcessor>();
+                    await processor.ProcessAsync(action, cancellationToken);
+                    break;
+                }
 
             case CheckDailySubscriptionsWorkItem dailyCheck:
                 {

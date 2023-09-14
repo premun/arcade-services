@@ -24,18 +24,18 @@ public class SubscriptionsController : Controller
 {
     public const string RequiredOrgForSubscriptionNotification = "microsoft";
 
-    private BuildAssetRegistryContext DBContext { get; }
-    private QueueProducerFactory Queue { get; }
-    private IGitHubClientFactory GitHubClientFactory { get; }
+    private readonly BuildAssetRegistryContext _dbContext;
+    private readonly QueueProducerFactory _queue;
+    private readonly IGitHubClientFactory _gitHubClientFactory;
 
     public SubscriptionsController(
         BuildAssetRegistryContext context,
         QueueProducerFactory queue,
         IGitHubClientFactory gitHubClientFactory)
     {
-        DBContext = context;
-        Queue = queue;
-        GitHubClientFactory = gitHubClientFactory;
+        _dbContext = context;
+        _queue = queue;
+        _gitHubClientFactory = gitHubClientFactory;
     }
 
     /// <summary>
@@ -54,7 +54,7 @@ public class SubscriptionsController : Controller
         int? channelId = null,
         bool? enabled = null)
     {
-        IQueryable<Data.Models.Subscription> query = DBContext.Subscriptions
+        IQueryable<Data.Models.Subscription> query = _dbContext.Subscriptions
             .Include(s => s.Channel)
             .Include(s => s.LastAppliedBuild);
 
@@ -91,7 +91,7 @@ public class SubscriptionsController : Controller
     [ValidateModelState]
     public async Task<IActionResult> GetSubscription(Guid id)
     {
-        Data.Models.Subscription? subscription = await DBContext.Subscriptions.Include(sub => sub.LastAppliedBuild)
+        Data.Models.Subscription? subscription = await _dbContext.Subscriptions.Include(sub => sub.LastAppliedBuild)
             .Include(sub => sub.Channel)
             .Include(sub => sub.LastAppliedBuild)
             .FirstOrDefaultAsync(sub => sub.Id == id);
@@ -114,7 +114,7 @@ public class SubscriptionsController : Controller
     [ValidateModelState]
     public async Task<IActionResult> TriggerSubscription(Guid id, [FromQuery(Name = "bar-build-id")] int buildId = 0)
     {
-        Data.Models.Subscription? subscription = await DBContext.Subscriptions.Include(sub => sub.LastAppliedBuild)
+        Data.Models.Subscription? subscription = await _dbContext.Subscriptions.Include(sub => sub.LastAppliedBuild)
             .Include(sub => sub.Channel)
             .FirstOrDefaultAsync(sub => sub.Id == id);
 
@@ -125,7 +125,7 @@ public class SubscriptionsController : Controller
 
         if (buildId != 0)
         {
-            Data.Models.Build? build = await DBContext.Builds.Where(b => b.Id == buildId).FirstOrDefaultAsync();
+            Data.Models.Build? build = await _dbContext.Builds.Where(b => b.Id == buildId).FirstOrDefaultAsync();
             // Non-existent build
             if (build == null)
             {
@@ -139,7 +139,7 @@ public class SubscriptionsController : Controller
             }
         }
 
-        var client = Queue.Create<StartSubscriptionUpdateWorkItem>();
+        var client = _queue.Create<StartSubscriptionUpdateWorkItem>();
         await client.SendAsync(new StartSubscriptionUpdateWorkItem
         {
             SubscriptionId = id,
@@ -156,7 +156,7 @@ public class SubscriptionsController : Controller
     [ValidateModelState]
     public async Task<IActionResult> TriggerDailyUpdate()
     {
-        var client = Queue.Create<CheckDailySubscriptionsWorkItem>();
+        var client = _queue.Create<CheckDailySubscriptionsWorkItem>();
         await client.SendAsync(new CheckDailySubscriptionsWorkItem());
 
         return Accepted();
@@ -172,7 +172,7 @@ public class SubscriptionsController : Controller
     [ValidateModelState]
     public async Task<IActionResult> UpdateSubscription(Guid id, [FromBody] SubscriptionUpdate update)
     {
-        Data.Models.Subscription? subscription = await DBContext.Subscriptions.Where(sub => sub.Id == id).Include(sub => sub.Channel)
+        Data.Models.Subscription? subscription = await _dbContext.Subscriptions.Where(sub => sub.Id == id).Include(sub => sub.Channel)
             .FirstOrDefaultAsync();
 
         if (subscription == null)
@@ -207,7 +207,7 @@ public class SubscriptionsController : Controller
 
         if (!string.IsNullOrEmpty(update.ChannelName))
         {
-            Data.Models.Channel? channel = await DBContext.Channels.Where(c => c.Name == update.ChannelName)
+            Data.Models.Channel? channel = await _dbContext.Channels.Where(c => c.Name == update.ChannelName)
                 .FirstOrDefaultAsync();
             if (channel == null)
             {
@@ -241,8 +241,8 @@ public class SubscriptionsController : Controller
                         }));
             }
 
-            DBContext.Subscriptions.Update(subscription);
-            await DBContext.SaveChangesAsync();
+            _dbContext.Subscriptions.Update(subscription);
+            await _dbContext.SaveChangesAsync();
         }
 
 
@@ -259,7 +259,7 @@ public class SubscriptionsController : Controller
     public async Task<IActionResult> DeleteSubscription(Guid id)
     {
         Data.Models.Subscription? subscription =
-            await DBContext.Subscriptions.FirstOrDefaultAsync(sub => sub.Id == id);
+            await _dbContext.Subscriptions.FirstOrDefaultAsync(sub => sub.Id == id);
 
         if (subscription == null)
         {
@@ -267,16 +267,16 @@ public class SubscriptionsController : Controller
         }
 
         Data.Models.SubscriptionUpdate? subscriptionUpdate =
-            await DBContext.SubscriptionUpdates.FirstOrDefaultAsync(u => u.SubscriptionId == subscription.Id);
+            await _dbContext.SubscriptionUpdates.FirstOrDefaultAsync(u => u.SubscriptionId == subscription.Id);
 
         if (subscriptionUpdate != null)
         {
-            DBContext.SubscriptionUpdates.Remove(subscriptionUpdate);
+            _dbContext.SubscriptionUpdates.Remove(subscriptionUpdate);
         }
 
-        DBContext.Subscriptions.Remove(subscription);
+        _dbContext.Subscriptions.Remove(subscription);
 
-        await DBContext.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync();
         return Ok(new Subscription(subscription));
     }
 
@@ -289,7 +289,7 @@ public class SubscriptionsController : Controller
     //[Paginated(typeof(SubscriptionHistoryItem))]
     public virtual async Task<IActionResult> GetSubscriptionHistory(Guid id)
     {
-        Data.Models.Subscription? subscription = await DBContext.Subscriptions.Where(sub => sub.Id == id)
+        Data.Models.Subscription? subscription = await _dbContext.Subscriptions.Where(sub => sub.Id == id)
             .FirstOrDefaultAsync();
 
         if (subscription == null)
@@ -297,7 +297,7 @@ public class SubscriptionsController : Controller
             return NotFound();
         }
 
-        IOrderedQueryable<SubscriptionUpdateHistoryEntry> query = DBContext.SubscriptionUpdateHistory
+        IOrderedQueryable<SubscriptionUpdateHistoryEntry> query = _dbContext.SubscriptionUpdateHistory
             .Where(u => u.SubscriptionId == id)
             .OrderByDescending(u => u.Timestamp);
 
@@ -317,7 +317,7 @@ public class SubscriptionsController : Controller
     {
         DateTime ts = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;
 
-        Data.Models.Subscription? subscription = await DBContext.Subscriptions.Where(sub => sub.Id == id)
+        Data.Models.Subscription? subscription = await _dbContext.Subscriptions.Where(sub => sub.Id == id)
             .FirstOrDefaultAsync();
 
         if (subscription == null)
@@ -325,7 +325,7 @@ public class SubscriptionsController : Controller
             return NotFound();
         }
 
-        SubscriptionUpdateHistoryEntry? update = await DBContext.SubscriptionUpdateHistory
+        SubscriptionUpdateHistoryEntry? update = await _dbContext.SubscriptionUpdateHistory
             .Where(u => u.SubscriptionId == id)
             .FirstOrDefaultAsync(u => Math.Abs(EF.Functions.DateDiffSecond(u.Timestamp, ts)) < 1);
 
@@ -341,7 +341,7 @@ public class SubscriptionsController : Controller
                 new ApiError("That action was successful, it cannot be retried."));
         }
 
-        var client = Queue.Create<SubscriptionActorActionWorkItem>();
+        var client = _queue.Create<SubscriptionActorActionWorkItem>();
         await client.SendAsync(new SubscriptionActorActionWorkItem
         {
             Subscriptionid = subscription.Id,
@@ -361,7 +361,7 @@ public class SubscriptionsController : Controller
     [ValidateModelState]
     public async Task<IActionResult> Create([FromBody, Required] SubscriptionData subscription)
     {
-        Data.Models.Channel? channel = await DBContext.Channels.Where(c => c.Name == subscription.ChannelName)
+        Data.Models.Channel? channel = await _dbContext.Channels.Where(c => c.Name == subscription.ChannelName)
             .FirstOrDefaultAsync();
         if (channel == null)
         {
@@ -371,7 +371,7 @@ public class SubscriptionsController : Controller
                     new[] { $"The channel '{subscription.ChannelName}' could not be found." }));
         }
 
-        Data.Models.Repository? repo = await DBContext.Repositories.FindAsync(subscription.TargetRepository);
+        Data.Models.Repository? repo = await _dbContext.Repositories.FindAsync(subscription.TargetRepository);
 
         if (subscription.TargetRepository is not null && subscription.TargetRepository.Contains("github.com"))
         {
@@ -399,7 +399,7 @@ public class SubscriptionsController : Controller
         {
             if (repo == null)
             {
-                DBContext.Repositories.Add(
+                _dbContext.Repositories.Add(
                     new Data.Models.Repository
                     {
                         RepositoryName = subscription.TargetRepository,
@@ -432,8 +432,8 @@ public class SubscriptionsController : Controller
             }
         }
 
-        await DBContext.Subscriptions.AddAsync(subscriptionModel);
-        await DBContext.SaveChangesAsync();
+        await _dbContext.Subscriptions.AddAsync(subscriptionModel);
+        await _dbContext.SaveChangesAsync();
         return CreatedAtRoute(
             new
             {
@@ -458,7 +458,7 @@ public class SubscriptionsController : Controller
         // - Target repo
         // - Target branch
         // - Not the same subscription id (for updates)
-        return await DBContext.Subscriptions.FirstOrDefaultAsync(sub =>
+        return await _dbContext.Subscriptions.FirstOrDefaultAsync(sub =>
             sub.SourceRepository == updatedOrNewSubscription.SourceRepository &&
             sub.ChannelId == updatedOrNewSubscription.Channel.Id &&
             sub.TargetRepository == updatedOrNewSubscription.TargetRepository &&
@@ -478,7 +478,7 @@ public class SubscriptionsController : Controller
         string[] allTags = pullRequestFailureNotificationTags.Split(';', StringSplitOptions.RemoveEmptyEntries);
 
         // We'll only be checking public membership in the Microsoft org, so no token needed
-        var client = GitHubClientFactory.CreateGitHubClient(string.Empty);
+        var client = _gitHubClientFactory.CreateGitHubClient(string.Empty);
         bool success = true;
 
         foreach (string tagToNotify in allTags)
