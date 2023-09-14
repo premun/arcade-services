@@ -19,6 +19,7 @@ public class NonBatchedPullRequestActor : PullRequestActor
     private readonly BuildAssetRegistryContext _dbContext;
     private readonly IPullRequestPolicyFailureNotifier _pullRequestPolicyFailureNotifier;
     private readonly IDatabase _redisCache;
+    private readonly IReminderManager _reminders;
 
     public NonBatchedPullRequestActor(
         PullRequestActorId actorId,
@@ -28,14 +29,16 @@ public class NonBatchedPullRequestActor : PullRequestActor
         IRemoteFactory darcFactory,
         ILoggerFactory loggerFactory,
         IPullRequestPolicyFailureNotifier pullRequestPolicyFailureNotifier,
-        IConnectionMultiplexer redis)
-        : base(actorId, mergePolicyEvaluator, dbContext, actorFactory, darcFactory, loggerFactory, redis)
+        IConnectionMultiplexer redis,
+        IReminderManager reminders)
+        : base(actorId, mergePolicyEvaluator, dbContext, actorFactory, darcFactory, loggerFactory, redis, reminders)
     {
         _lazySubscription = new Lazy<Task<Subscription>>(RetrieveSubscription);
         _actorId = actorId;
         _dbContext = dbContext;
         _pullRequestPolicyFailureNotifier = pullRequestPolicyFailureNotifier;
         _redisCache = redis.GetDatabase();
+        _reminders = reminders;
     }
 
     private async Task<Subscription> RetrieveSubscription()
