@@ -61,7 +61,7 @@ public class SubscriptionActor : ISubscriptionActor
             pullRequestActorId = new PullRequestActorId(_subscriptionId);
         }
 
-        _logger.LogInformation($"Creating pull request actor for '{pullRequestActorId}'");
+        _logger.LogInformation($"Creating pull request actor '{pullRequestActorId.Id}'");
 
         IPullRequestActor pullRequestActor = _actorFactory.CreatePullRequestActor(_subscriptionId);
 
