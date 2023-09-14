@@ -16,7 +16,7 @@ namespace Maestro.ContainerApp.Api.Controllers;
 /// <summary>
 ///   Exposes methods to Create/Read/Delete <see cref="DefaultChannel"/> mapping information.
 /// </summary>
-[Route("default-channels")]
+[Route("api/default-channels")]
 [ApiVersion("Latest")]
 public class DefaultChannelsController : Controller
 {

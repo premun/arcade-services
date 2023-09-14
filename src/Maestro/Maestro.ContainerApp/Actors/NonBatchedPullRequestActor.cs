@@ -44,7 +44,7 @@ public class NonBatchedPullRequestActor : PullRequestActor
 
     private async Task<Subscription> RetrieveSubscription()
     {
-        Subscription? subscription = await _dbContext.Subscriptions.FindAsync(_actorId.Id);
+        Subscription? subscription = await _dbContext.Subscriptions.FindAsync(new Guid(_actorId.Id));
         if (subscription == null)
         {
             await _reminders.TryUnregisterReminderAsync(PullRequestCheckReminder);

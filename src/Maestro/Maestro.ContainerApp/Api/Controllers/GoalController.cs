@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Maestro.ContainerApp.Api.Controllers;
 
-[Route("goals")]
+[Route("api/goals")]
 [ApiVersion("Latest")]
 public class GoalController : ControllerBase
 {

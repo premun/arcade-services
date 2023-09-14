@@ -19,7 +19,7 @@ namespace Maestro.ContainerApp.Api.Controllers;
 ///   Exposes methods to Read/Query/Create <see cref="Build"/>s.
 /// </summary>
 [ApiController]
-[Route("builds")]
+[Route("api/builds")]
 [ApiVersion("Latest")]
 public class BuildsController : ControllerBase
 {

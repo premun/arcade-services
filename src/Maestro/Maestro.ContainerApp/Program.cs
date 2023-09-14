@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Reflection;
 using Maestro.AzureDevOps;
 using Maestro.ContainerApp;
 using Maestro.ContainerApp.Actors;
@@ -8,16 +9,30 @@ using Maestro.ContainerApp.Queues;
 using Maestro.ContainerApp.Utils;
 using Maestro.Contracts;
 using Maestro.Data;
+using Microsoft.DncEng.Configuration.Extensions;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.GitHub.Authentication;
 using Microsoft.DotNet.Internal.Logging;
 using Microsoft.DotNet.Kusto;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Internal;
 using Microsoft.Extensions.Logging.Console;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configuration
+#pragma warning disable ASP0000 // Do not call 'IServiceCollection.BuildServiceProvider' in 'ConfigureServices'
+builder.Configuration.AddDefaultJsonConfiguration(builder.Environment, new ServiceCollection().BuildServiceProvider());
+#pragma warning restore ASP0000 // Do not call 'IServiceCollection.BuildServiceProvider' in 'ConfigureServices'
+builder.Services.Configure<GitHubTokenProviderOptions>(builder.Configuration.GetSection("GitHub"));
+builder.Services.Configure<GitHubClientOptions>(options =>
+{
+    options.ProductHeader = new Octokit.ProductHeaderValue(
+        "Maestro",
+        Assembly.GetEntryAssembly()!.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+});
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -48,14 +63,19 @@ builder.Services.AddTransient<IRemoteFactory, DarcRemoteFactory>();
 builder.Services.AddTransient<ISystemClock, SystemClock>();
 builder.Services.AddTransient<IVersionDetailsParser, VersionDetailsParser>();
 builder.Services.AddTransient<OperationManager>();
-builder.Services.AddTransient<TemporaryFiles>();
 builder.Services.AddSingleton<IInstallationLookup, BuildAssetRegistryInstallationLookup>();
 builder.Services.AddSingleton<TemporaryFiles>();
 builder.Services.AddKustoClientProvider("Kusto");
 builder.Services.AddGitHubTokenProvider();
 
 // SQL
-builder.Services.AddDbContext<BuildAssetRegistryContext>(options => options.UseSqlServer(builder.GetConnectionString("BuildAssetRegistry")));
+builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
+{
+    options.UseSqlServer(builder.GetConnectionString("BuildAssetRegistry"));
+
+    // Silence query execution logs
+    options.ConfigureWarnings(b => b.Log((RelationalEventId.CommandExecuted, LogLevel.Trace)));
+});
 
 // Redis
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(builder.GetConnectionString("Redis")));

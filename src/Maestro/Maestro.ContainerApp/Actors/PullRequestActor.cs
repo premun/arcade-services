@@ -257,11 +257,10 @@ public abstract class PullRequestActor : IPullRequestActor
     /// </returns>
     public virtual async Task<(InProgressPullRequest pr, bool canUpdate)> SynchronizeInProgressPullRequestAsync()
     {
-        var maybePr =
-            JsonSerializer.Deserialize<InProgressPullRequest>(await _redisCache.StringGetAsync(PullRequestRedisKey));
-        if (maybePr != null)
+        var redisContent = await _redisCache.StringGetAsync(PullRequestRedisKey);
+        if (!string.IsNullOrEmpty(redisContent))
         {
-            InProgressPullRequest pr = maybePr;
+            InProgressPullRequest pr = JsonSerializer.Deserialize<InProgressPullRequest>(redisContent);
             if (string.IsNullOrEmpty(pr.Url))
             {
                 // somehow a bad PR got in the collection, remove it
