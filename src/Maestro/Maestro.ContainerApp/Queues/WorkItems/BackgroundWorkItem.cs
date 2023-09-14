@@ -9,6 +9,7 @@ namespace Maestro.ContainerApp.Queues.WorkItems;
 [JsonDerivedType(typeof(BuildCoherencyInfoWorkItem), typeDiscriminator: nameof(BuildCoherencyInfoWorkItem))]
 [JsonDerivedType(typeof(CheckDailySubscriptionsWorkItem), typeDiscriminator: nameof(CheckDailySubscriptionsWorkItem))]
 [JsonDerivedType(typeof(SubscriptionActorActionWorkItem), typeDiscriminator: nameof(SubscriptionActorActionWorkItem))]
+[JsonDerivedType(typeof(PullRequestReminderWorkItem), typeDiscriminator: nameof(PullRequestReminderWorkItem))]
 public abstract class BackgroundWorkItem
 {
     public Guid WorkItemId { get; set; } = Guid.NewGuid();

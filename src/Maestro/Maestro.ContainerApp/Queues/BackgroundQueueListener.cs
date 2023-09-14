@@ -73,6 +73,9 @@ internal class BackgroundQueueListener : BackgroundService
     {
         switch (item)
         {
+            case PullRequestReminderWorkItem checkWorkItem:
+                _logger.LogInformation($"Processing {nameof(PullRequestReminderWorkItem)}");
+                break;
             case StartSubscriptionUpdateWorkItem startSubscriptionUpdate:
                 {
                     var processor = _serviceProvider.GetRequiredService<StartSubscriptionUpdateQueueProcess>();
