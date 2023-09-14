@@ -23,7 +23,9 @@ using StackExchange.Redis;
 var builder = WebApplication.CreateBuilder(args);
 
 // Configuration
-builder.Services.AddDefaultJsonConfiguration();
+#pragma warning disable ASP0000 // Do not call 'IServiceCollection.BuildServiceProvider' in 'ConfigureServices'
+builder.Configuration.AddDefaultJsonConfiguration(builder.Environment, new ServiceCollection().BuildServiceProvider());
+#pragma warning restore ASP0000 // Do not call 'IServiceCollection.BuildServiceProvider' in 'ConfigureServices'
 builder.Services.Configure<GitHubTokenProviderOptions>(builder.Configuration.GetSection("GitHub"));
 builder.Services.Configure<GitHubClientOptions>(options =>
 {

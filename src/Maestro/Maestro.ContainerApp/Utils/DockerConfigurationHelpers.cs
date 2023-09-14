@@ -3,13 +3,11 @@
 
 namespace Maestro.ContainerApp.Utils;
 
-public static class DockerHelpers
+public static class DockerConfigurationHelpers
 {
-    public static bool IsDocker => Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
-
     public static string GetConnectionString(this WebApplicationBuilder builder, string name)
     {
-        var section = IsDocker
+        var section = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true"
             ? builder.Configuration.GetSection("ConnectionStrings")
             : builder.Configuration.GetSection("ConnectionStringsNonDocker");
 
