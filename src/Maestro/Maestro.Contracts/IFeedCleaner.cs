@@ -2,11 +2,10 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Threading.Tasks;
-using Microsoft.ServiceFabric.Services.Remoting;
 
 namespace Maestro.Contracts;
 
-public interface IFeedCleanerService : IService
+public interface IFeedCleanerService
 {
     Task CleanManagedFeedsAsync();
 }

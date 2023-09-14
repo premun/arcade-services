@@ -6,7 +6,7 @@ using Microsoft.ServiceFabric.Actors;
 
 namespace Maestro.ContainerApp.Actors;
 
-public interface ISubscriptionActor : IActor
+public interface ISubscriptionActor
 {
     Task UpdateAsync(int buildId);
     Task<bool> UpdateForMergedPullRequestAsync(int updateBuildId);
