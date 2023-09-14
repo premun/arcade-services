@@ -19,7 +19,7 @@ namespace Maestro.ContainerApp.Api.Controllers;
 /// <summary>
 ///   Exposes methods to Create/Read/Edit/Delete <see cref="Channel"/>s.
 /// </summary>
-[Route("channels")]
+[Route("api/channels")]
 [ApiVersion("Latest")]
 public class ChannelsController : Controller
 {

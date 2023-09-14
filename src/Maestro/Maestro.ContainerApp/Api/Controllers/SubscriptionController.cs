@@ -18,7 +18,7 @@ namespace Maestro.ContainerApp.Api.Controllers;
 /// <summary>
 ///   Exposes methods to Create/Read/Update/Delete <see cref="Subscription"/>s
 /// </summary>
-[Route("subscriptions")]
+[Route("api/subscriptions")]
 [ApiVersion("Latest")]
 public class SubscriptionsController : Controller
 {
