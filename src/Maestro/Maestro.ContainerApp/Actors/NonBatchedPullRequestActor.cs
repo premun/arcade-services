@@ -46,6 +46,8 @@ public class NonBatchedPullRequestActor : PullRequestActor
         Subscription? subscription = await _dbContext.Subscriptions.FindAsync(_actorId.Id);
         if (subscription == null)
         {
+            await _reminders.TryUnregisterReminderAsync(PullRequestCheckReminder);
+            await _reminders.TryUnregisterReminderAsync(PullRequestUpdateReminder);
             await _redisCache.KeyDeleteAsync(PullRequestRedisKey);
 
             throw new SubscriptionException($"Subscription '{_actorId.Id}' was not found...");

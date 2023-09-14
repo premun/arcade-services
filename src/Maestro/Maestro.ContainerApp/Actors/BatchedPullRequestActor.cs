@@ -24,8 +24,9 @@ public class BatchedPullRequestActor : PullRequestActor
         IActorFactory actorFactory,
         IRemoteFactory darcFactory,
         ILoggerFactory loggerFactory,
-        IConnectionMultiplexer redis)
-        : base(actorId, mergePolicyEvaluator, context, actorFactory, darcFactory, loggerFactory, redis)
+        IConnectionMultiplexer redis,
+        IReminderManager reminders)
+        : base(actorId, mergePolicyEvaluator, context, actorFactory, darcFactory, loggerFactory, redis, reminders)
     {
         _actorId = actorId;
         _context = context;
