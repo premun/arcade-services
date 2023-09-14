@@ -75,7 +75,7 @@ internal class BackgroundQueueListener : BackgroundService
         {
             case StartSubscriptionUpdateWorkItem startSubscriptionUpdate:
                 {
-                    var processor = _serviceProvider.GetRequiredService<StartSubscriptionUpdateQueueProcess>();
+                    var processor = _serviceProvider.GetRequiredService<StartSubscriptionUpdateQueueProcessor>();
                     await processor.ProcessAsync(startSubscriptionUpdate, cancellationToken);
                     break;
                 }

@@ -6,11 +6,11 @@ using Maestro.Contracts;
 
 namespace Maestro.ContainerApp.Queues.QueueProcessors;
 
-internal class StartSubscriptionUpdateQueueProcess : QueueProcessor<StartSubscriptionUpdateWorkItem>
+internal class StartSubscriptionUpdateQueueProcessor : QueueProcessor<StartSubscriptionUpdateWorkItem>
 {
     private readonly IDependencyUpdater _dependencyUpdater;
 
-    public StartSubscriptionUpdateQueueProcess(IDependencyUpdater dependencyUpdater, ILogger logger)
+    public StartSubscriptionUpdateQueueProcessor(IDependencyUpdater dependencyUpdater, ILogger<StartSubscriptionUpdateQueueProcessor> logger)
         : base(logger)
     {
         _dependencyUpdater = dependencyUpdater;
