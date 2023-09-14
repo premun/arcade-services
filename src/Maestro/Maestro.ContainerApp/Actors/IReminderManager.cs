@@ -17,28 +17,28 @@ public interface IReminderManager
 
 public class ReminderManager : IReminderManager
 {
-    private QueueProducerFactory Queue { get; }
-    private IConnectionMultiplexer Redis { get; }
-    private IDatabase Database { get; }
+    private readonly QueueProducerFactory _queue;
+    private readonly IConnectionMultiplexer _redis;
+    private readonly IDatabase _database;
 
     public ReminderManager(QueueProducerFactory queue, IConnectionMultiplexer redis)
     {
-        Queue = queue;
-        Redis = redis;
-        Database = Redis.GetDatabase();
+        _queue = queue;
+        _redis = redis;
+        _database = _redis.GetDatabase();
     }
 
     public async Task TryRegisterReminderAsync(string reminderName, TimeSpan visibilityTimeout)
     {
-        var client = Queue.Create<PullRequestReminderWorkItem>();
+        var client = _queue.Create<PullRequestReminderWorkItem>();
         var sendReceipt = await client.SendAsync(new PullRequestReminderWorkItem(), visibilityTimeout);
-        await Database.StringSetAsync(reminderName,
+        await _database.StringSetAsync(reminderName,
             JsonSerializer.Serialize(new ReminderArguments(sendReceipt.PopReceipt, sendReceipt.MessageId)));
     }
 
     public async Task TryUnregisterReminderAsync(string reminderName)
     {
-        var reminderRecord = await Database.StringGetAsync(reminderName);
+        var reminderRecord = await _database.StringGetAsync(reminderName);
         if(reminderRecord == RedisValue.Null)
         {
             return;
@@ -47,7 +47,7 @@ public class ReminderManager : IReminderManager
         var reminderMessage = JsonSerializer.Deserialize<ReminderArguments>(reminderRecord!)
             ?? throw new Exception("Reminder deserialization failed");
 
-        var client = Queue.Create<PullRequestReminderWorkItem>();
+        var client = _queue.Create<PullRequestReminderWorkItem>();
         await client.DeleteAsync(reminderMessage.MessageId, reminderMessage.PopReceipt);
     }
 
