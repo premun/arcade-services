@@ -11,6 +11,9 @@ namespace Maestro.ContainerApp.Actors;
 public class PullRequestActorId
 {
     public string Id { get; private set; }
+
+    public ActorIdKind IdKind { get; private set; }
+
     /// <summary>
     ///     Creates an <see cref="ActorId" /> identifying the PullRequestActor responsible for pull requests for the
     ///     non-batched subscription
@@ -19,6 +22,7 @@ public class PullRequestActorId
     public PullRequestActorId(Guid subscriptionId)
     {
         Id = subscriptionId.ToString();
+        IdKind = ActorIdKind.Guid;
     }
 
     /// <summary>
@@ -29,6 +33,7 @@ public class PullRequestActorId
     public PullRequestActorId(string repository, string branch)
     {
         Id = Encode(repository) + ":" + Encode(branch);
+        IdKind = ActorIdKind.String;
     }
 
     /// <summary>
@@ -63,4 +68,10 @@ public class PullRequestActorId
     {
         return Encoding.UTF8.GetString(Convert.FromBase64String(value));
     }
+}
+
+public enum ActorIdKind
+{
+    Guid,
+    String
 }

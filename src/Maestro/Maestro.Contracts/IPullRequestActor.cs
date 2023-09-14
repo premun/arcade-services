@@ -13,5 +13,5 @@ public interface IPullRequestActor
 
     Task ProcessPendingUpdatesAsync();
 
-    //Task<(InProgressPullRequest pr, bool canUpdate)> SynchronizeInProgressPullRequestAsync();
+    Task<(InProgressPullRequest pr, bool canUpdate)> SynchronizeInProgressPullRequestAsync();
 }

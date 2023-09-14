@@ -125,7 +125,7 @@ public abstract class PullRequestActor : IPullRequestActor
                         JsonSerializer.Serialize(new List<UpdateAssetsParameters> { updateParameter }));
                 }
 
-                await _reminders.TryRegisterReminderAsync(PullRequestUpdateReminder, _remindersTimeSpan);
+                await _reminders.TryRegisterReminderAsync(PullRequestUpdateReminder, _actorId, _remindersTimeSpan);
 
                 _logger.LogInformation($"Current Pull request '{pr.Url}' cannot be updated, update queued.");
                 return;
@@ -622,7 +622,7 @@ public abstract class PullRequestActor : IPullRequestActor
 
                 await _redisCache.StringSetAsync(PullRequestRedisKey, JsonSerializer.Serialize(inProgressPr));
 
-                await _reminders.TryRegisterReminderAsync(PullRequestCheckReminder, _remindersTimeSpan);
+                await _reminders.TryRegisterReminderAsync(PullRequestCheckReminder, _actorId, _remindersTimeSpan);
 
                 return prUrl;
             }
@@ -833,7 +833,7 @@ public abstract class PullRequestActor : IPullRequestActor
 
         await _redisCache.StringSetAsync(PullRequestRedisKey, JsonSerializer.Serialize(pr));
 
-        await _reminders.TryRegisterReminderAsync(PullRequestCheckReminder, _remindersTimeSpan);
+        await _reminders.TryRegisterReminderAsync(PullRequestCheckReminder, _actorId, _remindersTimeSpan);
     }
 
 
