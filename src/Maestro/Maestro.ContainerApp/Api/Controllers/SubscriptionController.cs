@@ -114,18 +114,6 @@ public class SubscriptionsController : Controller
     [ValidateModelState]
     public async Task<IActionResult> TriggerSubscription(Guid id, [FromQuery(Name = "bar-build-id")] int buildId = 0)
     {
-        return await TriggerSubscriptionCore(id, buildId);
-    }
-
-    [HttpPost("/test-trigger")]
-    [ValidateModelState]
-    public async Task<IActionResult> TriggerTestSubscription()
-    {
-        return await TriggerSubscriptionCore(new Guid("0bf57238-1f9d-430b-23b8-08dbb4fecd36"), 0);
-    }
-
-    protected async Task<IActionResult> TriggerSubscriptionCore(Guid id, int buildId)
-    {
         Data.Models.Subscription? subscription = await DBContext.Subscriptions.Include(sub => sub.LastAppliedBuild)
             .Include(sub => sub.Channel)
             .FirstOrDefaultAsync(sub => sub.Id == id);
@@ -158,6 +146,13 @@ public class SubscriptionsController : Controller
             BuildId = buildId,
         });
         return Accepted(new Subscription(subscription));
+    }
+
+    [HttpPost("/test-trigger")]
+    [ValidateModelState]
+    public async Task<IActionResult> TriggerTestSubscription()
+    {
+        return await TriggerSubscription(new Guid("0bf57238-1f9d-430b-23b8-08dbb4fecd36"), 0);
     }
 
     /// <summary>
@@ -241,7 +236,7 @@ public class SubscriptionsController : Controller
 
         if (doUpdate)
         {
-            Data.Models.Subscription equivalentSubscription = await FindEquivalentSubscription(subscription);
+            Data.Models.Subscription? equivalentSubscription = await FindEquivalentSubscription(subscription);
             if (equivalentSubscription != null)
             {
                 return Conflict(
@@ -424,7 +419,7 @@ public class SubscriptionsController : Controller
         subscriptionModel.Channel = channel;
 
         // Check that we're not about add an existing subscription that is identical
-        Data.Models.Subscription equivalentSubscription = await FindEquivalentSubscription(subscriptionModel);
+        Data.Models.Subscription? equivalentSubscription = await FindEquivalentSubscription(subscriptionModel);
         if (equivalentSubscription != null)
         {
             return BadRequest(
@@ -462,7 +457,7 @@ public class SubscriptionsController : Controller
     /// </summary>
     /// <param name="updatedOrNewSubscription">Subscription model with updated data.</param>
     /// <returns>Subscription if it is found, null otherwise</returns>
-    private async Task<Data.Models.Subscription> FindEquivalentSubscription(Data.Models.Subscription updatedOrNewSubscription)
+    private async Task<Data.Models.Subscription?> FindEquivalentSubscription(Data.Models.Subscription updatedOrNewSubscription)
     {
         // Compare subscriptions based on the 4 key elements:
         // - Channel
@@ -470,15 +465,12 @@ public class SubscriptionsController : Controller
         // - Target repo
         // - Target branch
         // - Not the same subscription id (for updates)
-        var tmp = await DBContext.Subscriptions.FirstOrDefaultAsync(sub =>
+        return await DBContext.Subscriptions.FirstOrDefaultAsync(sub =>
             sub.SourceRepository == updatedOrNewSubscription.SourceRepository &&
             sub.ChannelId == updatedOrNewSubscription.Channel.Id &&
             sub.TargetRepository == updatedOrNewSubscription.TargetRepository &&
             sub.TargetBranch == updatedOrNewSubscription.TargetBranch &&
             sub.Id != updatedOrNewSubscription.Id);
-
-        /// HERE!
-        return tmp!;
     }
 
     /// <summary>
