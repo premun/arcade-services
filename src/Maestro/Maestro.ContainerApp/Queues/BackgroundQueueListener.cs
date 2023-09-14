@@ -1,11 +1,14 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System;
 using System.Text.Json;
 using Azure.Storage.Queues;
 using Azure.Storage.Queues.Models;
+using Maestro.ContainerApp.Actors;
 using Maestro.ContainerApp.Queues.QueueProcessors;
 using Maestro.ContainerApp.Queues.WorkItems;
+using Maestro.Contracts;
 
 namespace Maestro.ContainerApp.Queues;
 
@@ -71,18 +74,27 @@ internal class BackgroundQueueListener : BackgroundService
         switch (item)
         {
             case StartSubscriptionUpdateWorkItem startSubscriptionUpdate:
-                _logger.LogInformation($"Processing { nameof(StartSubscriptionUpdateWorkItem) }: { startSubscriptionUpdate.SubscriptionId }");
-                break;
+                {
+                    var processor = _serviceProvider.GetRequiredService<StartSubscriptionUpdateQueueProcess>();
+                    await processor.ProcessAsync(startSubscriptionUpdate, cancellationToken);
+                    break;
+                }
+
             case SubscriptionActorActionWorkItem action:
                 _logger.LogInformation($"Processing { nameof(SubscriptionActorActionWorkItem) }: { action.Subscriptionid }, { action.Method }, { action.MethodArguments }");
                 break;
+
             case CheckDailySubscriptionsWorkItem action:
                 _logger.LogInformation($"Processing { nameof(CheckDailySubscriptionsWorkItem) }");
                 break;
+
             case BuildCoherencyInfoWorkItem action:
-                var processor = _serviceProvider.GetRequiredService<BuildCoherencyInfoQueueProcessor>();
-                await processor.ProcessAsync(action, CancellationToken.None);
-                break;
+                {
+                    var processor = _serviceProvider.GetRequiredService<BuildCoherencyInfoQueueProcessor>();
+                    await processor.ProcessAsync(action, cancellationToken);
+                    break;
+                }
+
             default:
                 throw new NotImplementedException($"Unknown work item type: {item.GetType().Name}");
         }
