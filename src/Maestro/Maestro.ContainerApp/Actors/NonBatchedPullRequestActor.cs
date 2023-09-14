@@ -1,6 +1,7 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using Maestro.Contracts;
 using Maestro.Data;
 using Maestro.Data.Models;
 using Microsoft.DotNet.DarcLib;
@@ -19,6 +20,7 @@ public class NonBatchedPullRequestActor : PullRequestActor
     private readonly BuildAssetRegistryContext _dbContext;
     private readonly IPullRequestPolicyFailureNotifier _pullRequestPolicyFailureNotifier;
     private readonly IDatabase _redisCache;
+    private readonly IReminderManager _reminders;
 
     public NonBatchedPullRequestActor(
         PullRequestActorId actorId,
@@ -28,14 +30,16 @@ public class NonBatchedPullRequestActor : PullRequestActor
         IRemoteFactory darcFactory,
         ILoggerFactory loggerFactory,
         IPullRequestPolicyFailureNotifier pullRequestPolicyFailureNotifier,
-        IConnectionMultiplexer redis)
-        : base(actorId, mergePolicyEvaluator, dbContext, actorFactory, darcFactory, loggerFactory, redis)
+        IConnectionMultiplexer redis,
+        IReminderManager reminders)
+        : base(actorId, mergePolicyEvaluator, dbContext, actorFactory, darcFactory, loggerFactory, redis, reminders)
     {
         _lazySubscription = new Lazy<Task<Subscription>>(RetrieveSubscription);
         _actorId = actorId;
         _dbContext = dbContext;
         _pullRequestPolicyFailureNotifier = pullRequestPolicyFailureNotifier;
         _redisCache = redis.GetDatabase();
+        _reminders = reminders;
     }
 
     private async Task<Subscription> RetrieveSubscription()
@@ -43,6 +47,8 @@ public class NonBatchedPullRequestActor : PullRequestActor
         Subscription? subscription = await _dbContext.Subscriptions.FindAsync(new Guid(_actorId.Id));
         if (subscription == null)
         {
+            await _reminders.TryUnregisterReminderAsync(PullRequestCheckReminder);
+            await _reminders.TryUnregisterReminderAsync(PullRequestUpdateReminder);
             await _redisCache.KeyDeleteAsync(PullRequestRedisKey);
 
             throw new SubscriptionException($"Subscription '{_actorId.Id}' was not found...");

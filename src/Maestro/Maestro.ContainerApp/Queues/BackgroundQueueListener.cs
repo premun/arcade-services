@@ -75,9 +75,13 @@ internal class BackgroundQueueListener : BackgroundService
 
         switch (item)
         {
-            case PullRequestReminderWorkItem checkWorkItem:
-                _logger.LogInformation($"Processing {nameof(PullRequestReminderWorkItem)}");
+            case PullRequestReminderWorkItem pullRequestReminderWorkItem:
+                {
+                    var processor = scope.ServiceProvider.GetRequiredService<PullRequestReminderQueueProcessor>();
+                    await processor.ProcessAsync(pullRequestReminderWorkItem, cancellationToken);
+                }
                 break;
+
             case StartSubscriptionUpdateWorkItem startSubscriptionUpdate:
                 {
                     var processor = scope.ServiceProvider.GetRequiredService<StartSubscriptionUpdateQueueProcessor>();

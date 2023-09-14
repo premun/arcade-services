@@ -80,6 +80,8 @@ builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
 // Redis
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(builder.GetConnectionString("Redis")));
 
+builder.Services.AddSingleton<IReminderManager, ReminderManager>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

@@ -4,10 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
-using Maestro.Contracts;
-using Microsoft.DotNet.DarcLib;
 
-namespace Maestro.ContainerApp.Actors;
+namespace Maestro.Contracts;
 
 #nullable disable
 

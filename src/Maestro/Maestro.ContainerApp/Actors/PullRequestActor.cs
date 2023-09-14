@@ -24,6 +24,8 @@ public abstract class PullRequestActor : IPullRequestActor
 {
     public const string PullRequestCheck = "pullRequestCheck";
     public const string PullRequestUpdate = "pullRequestUpdate";
+    public const string PullRequestCheckReminderPrefix = "pullRequestCheckReminder";
+    public const string PullRequestUpdateReminderPrefix = "pullRequestUpdateReminder";
     public const string PullRequest = "pullRequest";
     public const string DependencyUpdateBegin = "[DependencyUpdate]: <> (Begin)";
     public const string DependencyUpdateEnd = "[DependencyUpdate]: <> (End)";
@@ -36,6 +38,9 @@ public abstract class PullRequestActor : IPullRequestActor
     private readonly IRemoteFactory _darcRemoteFactory;
     private readonly IDatabase _redisCache;
     private readonly PullRequestActorId _actorId;
+    private readonly IReminderManager _reminders;
+    
+    private readonly TimeSpan _remindersTimeSpan = TimeSpan.FromMinutes(5);
 
     protected PullRequestActor(
         PullRequestActorId actorId,
@@ -44,7 +49,8 @@ public abstract class PullRequestActor : IPullRequestActor
         IActorFactory actorFactory,
         IRemoteFactory darcFactory,
         ILoggerFactory loggerFactory,
-        IConnectionMultiplexer redis)
+        IConnectionMultiplexer redis,
+        IReminderManager reminders)
     {
         _mergePolicyEvaluator = mergePolicyEvaluator;
         _dbContext = context;
@@ -54,15 +60,20 @@ public abstract class PullRequestActor : IPullRequestActor
         _logger = loggerFactory.CreateLogger(GetType());
         _redisCache = redis.GetDatabase();
         _actorId = actorId;
+        _reminders = reminders;
 
         PullRequestRedisKey = PullRequest + _actorId.Id;
-        PullRequestUpdateRedisKey = PullRequest + _actorId.Id;
+        PullRequestUpdateRedisKey = PullRequestUpdate + _actorId.Id;
         PullRequestCheckRedisKey = PullRequestCheck + _actorId.Id;
+        PullRequestCheckReminder = PullRequestCheckReminderPrefix + _actorId.Id;
+        PullRequestUpdateReminder = PullRequestUpdateReminderPrefix + _actorId.Id;
     }
 
     protected string PullRequestRedisKey { get; }
     protected string PullRequestUpdateRedisKey { get; }
     protected string PullRequestCheckRedisKey { get; }
+    protected string PullRequestCheckReminder { get; }
+    protected string PullRequestUpdateReminder { get; }
 
     /// <summary>
     ///     Applies or queues asset updates for the target repository and branch from the given build and list of assets.
@@ -113,6 +124,9 @@ public abstract class PullRequestActor : IPullRequestActor
                         PullRequestUpdateRedisKey,
                         JsonSerializer.Serialize(new List<UpdateAssetsParameters> { updateParameter }));
                 }
+
+                await _reminders.TryRegisterReminderAsync(PullRequestUpdateReminder, _actorId, _remindersTimeSpan);
+
                 _logger.LogInformation($"Current Pull request '{pr.Url}' cannot be updated, update queued.");
                 return;
             }
@@ -160,6 +174,7 @@ public abstract class PullRequestActor : IPullRequestActor
         if (updates == null || updates.Count < 1)
         {
             _logger.LogInformation("No Pending Updates");
+            await _reminders.TryUnregisterReminderAsync(PullRequestUpdateReminder);
             return;
         }
 
@@ -193,6 +208,7 @@ public abstract class PullRequestActor : IPullRequestActor
         }
 
         await _redisCache.KeyDeleteAsync(PullRequestUpdateRedisKey);
+        await _reminders.TryUnregisterReminderAsync(PullRequestUpdateReminder);
 
         _logger.LogInformation("Pending updates applied. " + result);
         return;
@@ -260,6 +276,7 @@ public abstract class PullRequestActor : IPullRequestActor
                 // need to periodically run the synchronization any longer.
                 case SynchronizePullRequestResult.Completed:
                 case SynchronizePullRequestResult.UnknownPR:
+                    await _reminders.TryUnregisterReminderAsync(PullRequestCheckReminder);
                     return (null, false);
                 case SynchronizePullRequestResult.InProgressCanUpdate:
                     return (pr, true);
@@ -277,6 +294,7 @@ public abstract class PullRequestActor : IPullRequestActor
             }
         }
 
+        await _reminders.TryUnregisterReminderAsync(PullRequestCheckReminder);
         return (null, false);
     }
 
@@ -450,6 +468,8 @@ public abstract class PullRequestActor : IPullRequestActor
             if (!await actor.UpdateForMergedPullRequestAsync(update.BuildId))
             {
                 _logger.LogInformation($"Failed to update subscription {update.SubscriptionId} for merged PR.");
+                await _reminders.TryUnregisterReminderAsync(PullRequestCheckReminder);
+                await _reminders.TryUnregisterReminderAsync(PullRequestUpdateReminder);
                 await _redisCache.KeyDeleteAsync(PullRequestRedisKey);
             }
         }
@@ -600,6 +620,9 @@ public abstract class PullRequestActor : IPullRequestActor
 
 
                 await _redisCache.StringSetAsync(PullRequestRedisKey, JsonSerializer.Serialize(inProgressPr));
+
+                await _reminders.TryRegisterReminderAsync(PullRequestCheckReminder, _actorId, _remindersTimeSpan);
+
                 return prUrl;
             }
 
@@ -808,6 +831,8 @@ public abstract class PullRequestActor : IPullRequestActor
         await darcRemote.UpdatePullRequestAsync(pr.Url, pullRequest);
 
         await _redisCache.StringSetAsync(PullRequestRedisKey, JsonSerializer.Serialize(pr));
+
+        await _reminders.TryRegisterReminderAsync(PullRequestCheckReminder, _actorId, _remindersTimeSpan);
     }
 
 
