@@ -148,13 +148,6 @@ public class SubscriptionsController : Controller
         return Accepted(new Subscription(subscription));
     }
 
-    [HttpPost("/test-trigger")]
-    [ValidateModelState]
-    public async Task<IActionResult> TriggerTestSubscription()
-    {
-        return await TriggerSubscription(new Guid("0bf57238-1f9d-430b-23b8-08dbb4fecd36"), 0);
-    }
-
     /// <summary>
     ///   Trigger daily update
     /// </summary>
