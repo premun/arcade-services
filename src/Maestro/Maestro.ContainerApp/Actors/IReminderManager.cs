@@ -20,14 +20,14 @@ public interface IReminderManager
 public class ReminderManager : IReminderManager
 {
     private QueueProducerFactory Queue { get; }
-    public IConnectionMultiplexer Redis { get; }
-    public IDatabase Database { get; }
+    private IConnectionMultiplexer Redis { get; }
+    private IDatabase Database { get; }
 
     public ReminderManager(QueueProducerFactory queue, IConnectionMultiplexer redis)
     {
         Queue = queue;
         Redis = redis;
-        Database = redis.GetDatabase();
+        Database = Redis.GetDatabase();
     }
 
     public async Task TryRegisterReminderAsync(string reminderName, TimeSpan visibilityTimeout)
