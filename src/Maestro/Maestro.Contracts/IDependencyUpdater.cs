@@ -10,8 +10,6 @@ namespace Maestro.Contracts;
 
 public interface IDependencyUpdater : IService
 {
-    Task StartUpdateDependenciesAsync(int buildId, int channelId);
-
     Task StartSubscriptionUpdateAsync(Guid subscription);
 
     Task StartSubscriptionUpdateForSpecificBuildAsync(Guid subscription, int buildId);

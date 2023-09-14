@@ -103,8 +103,10 @@ public partial class Startup : StartupBase
 
         public Task ProcessAsync(JToken argumentToken)
         {
-            var argVal = argumentToken.ToObject<Arguments>();
-            return _updater.StartUpdateDependenciesAsync(argVal.BuildId, argVal.ChannelId);
+            // REMOVED FOR HACKATHON
+            // var argVal = argumentToken.ToObject<Arguments>();
+            // return _updater.StartUpdateDependenciesAsync(argVal.BuildId, argVal.ChannelId);
+            return Task.CompletedTask;
         }
 
         public static JToken CreateArgs(BuildChannel channel)

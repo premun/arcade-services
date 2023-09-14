@@ -25,7 +25,7 @@ public static class Program
         ServiceHost.Run(
             host =>
             {
-                host.RegisterStatefulService<DependencyUpdater>("DependencyUpdaterType");
+                //host.RegisterStatefulService<DependencyUpdater>("DependencyUpdaterType"); REMOVED FOR HACKATHON
                 host.ConfigureServices(Configure);
             });
     }
