@@ -249,9 +249,11 @@ public class RepositoryController : Controller
 
         public Task ProcessAsync(JToken argumentToken)
         {
-            var update = argumentToken.ToObject<Arguments>();
-            IPullRequestActor actor = _factory.Lookup(PullRequestActorId.Create(update.Repository, update.Branch));
-            return actor.RunActionAsync(update.Method, update.MethodArguments);
+            // REMOVED FOR HACKATHON
+            // var update = argumentToken.ToObject<Arguments>();
+            //IPullRequestActor actor = _factory.Lookup(PullRequestActorId.Create(update.Repository, update.Branch));
+            //return actor.RunActionAsync(update.Method, update.MethodArguments);
+            return Task.CompletedTask;
         }
 
         public static JToken GetArguments(RepositoryBranchUpdateHistoryEntry update)

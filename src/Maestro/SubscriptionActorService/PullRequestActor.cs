@@ -10,6 +10,7 @@ using System.Runtime.Serialization;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using LibGit2Sharp;
 using Maestro.Contracts;
 using Maestro.Data;
 using Maestro.Data.Models;
@@ -88,6 +89,9 @@ namespace SubscriptionActorService
         {
             return Implementation.UpdateAssetsAsync(subscriptionId, buildId, sourceRepo, sourceSha, assets);
         }
+
+        // REMOVED FOR HACKATHON
+        public Task ProcessPendingUpdatesAsync() => throw new NotImplementedException();
     }
 
     public abstract class PullRequestActorImplementation : IPullRequestActor, IActionTracker
@@ -1112,6 +1116,9 @@ namespace SubscriptionActorService
 
             return repoBranch;
         }
+
+        // REMOVED FOR HACKATHON
+        Task IPullRequestActor.ProcessPendingUpdatesAsync() => throw new NotImplementedException();
 
         [DataContract]
         public class UpdateAssetsParameters
