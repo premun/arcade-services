@@ -3,6 +3,7 @@
 
 
 using System.Threading.Tasks;
+using Maestro.Contracts;
 
 namespace Maestro.ContainerApp.Actors;
 
