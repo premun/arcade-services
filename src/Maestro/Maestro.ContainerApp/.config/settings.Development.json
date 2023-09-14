@@ -1,5 +1,21 @@
 {
-  "HealthTableUri": "",
-  "KeyVaultUri": "https://maestrolocal.vault.azure.net/",
-  "AppConfigurationUri": "https://maestrolocal.azconfig.io/"
+    "Logging": {
+        "LogLevel": {
+            "Default": "Information",
+            "Microsoft.AspNetCore": "Warning"
+        }
+    },
+    "ConnectionStrings": {
+        "AzureQueues": "UseDevelopmentStorage=true;DevelopmentStorageProxyUri=http://host.docker.internal",
+        "BuildAssetRegistry": "Data Source=host.docker.internal,1433;User Id=SA;Password=ProdCon123;Initial Catalog=BuildAssetRegistry",
+        "Redis": "host.docker.internal:6379"
+    },
+    "ConnectionStringsNonDocker": {
+        "AzureQueues": "UseDevelopmentStorage=true;DevelopmentStorageProxyUri=http://127.0.0.1",
+        "BuildAssetRegistry": "Data Source=localhost,1433;User Id=SA;Password=ProdCon123;Initial Catalog=BuildAssetRegistry",
+        "Redis": "127.0.0.1:6379"
+    },
+    "HealthTableUri": "",
+    "KeyVaultUri": "https://maestrolocal.vault.azure.net/",
+    "AppConfigurationUri": "https://maestrolocal.azconfig.io/"
 }
