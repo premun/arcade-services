@@ -13,7 +13,7 @@ namespace Maestro.ContainerApp.Api.Controllers;
 /// <summary>
 ///   Exposes methods to Create/Read/Delete <see cref="ReleasePipeline"/> information.
 /// </summary>
-[Route("pipelines")]
+[Route("api/pipelines")]
 [ApiVersion("Latest")]
 public class PipelinesController : Controller
 {

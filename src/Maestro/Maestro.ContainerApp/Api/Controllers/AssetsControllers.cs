@@ -14,7 +14,7 @@ namespace Maestro.ContainerApp.Api.Controllers;
 ///   Exposes methods to Read/Query <see cref="Asset"/>s and modify <see cref="AssetLocation"/> information
 /// </summary>
 [ApiController]
-[Route("assets")]
+[Route("api/assets")]
 public class AssetsControllers : Controller
 {
     /// <summary>
