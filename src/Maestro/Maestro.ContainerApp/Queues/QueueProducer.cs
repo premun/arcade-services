@@ -19,14 +19,7 @@ public class QueueProducer<T> where T : BackgroundWorkItem
         _queueName = queueName;
     }
 
-    public async Task SendAsync(T message)
-    {
-        var client = _queueClient.GetQueueClient(_queueName);
-        var json = JsonSerializer.Serialize<BackgroundWorkItem>(message);
-        await client.SendMessageAsync(json);
-    }
-
-    public async Task<SendReceipt> SendAsync(T message, TimeSpan? visibilityTimeout)
+    public async Task<SendReceipt> SendAsync(T message, TimeSpan? visibilityTimeout = null)
     {
         var client = _queueClient.GetQueueClient(_queueName);
         var json = JsonSerializer.Serialize<BackgroundWorkItem>(message);
