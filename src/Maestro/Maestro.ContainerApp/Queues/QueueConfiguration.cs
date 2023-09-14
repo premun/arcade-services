@@ -14,6 +14,7 @@ internal static class QueueConfiguration
     {
         builder.Services.AddTransient<BuildCoherencyInfoQueueProcessor>();
         builder.Services.AddTransient<StartSubscriptionUpdateQueueProcessor>();
+        builder.Services.AddTransient<CheckDailySubscriptionsQueueProcessor>();
 
         builder.Services.AddAzureClients(clientBuilder =>
         {
