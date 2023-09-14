@@ -8,6 +8,7 @@ using Maestro.ContainerApp.Queues;
 using Maestro.ContainerApp.Utils;
 using Maestro.Contracts;
 using Maestro.Data;
+using Microsoft.DncEng.Configuration.Extensions;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.GitHub.Authentication;
 using Microsoft.DotNet.Internal.Logging;
@@ -19,6 +20,10 @@ using Microsoft.Extensions.Logging.Console;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configuration
+builder.Services.AddDefaultJsonConfiguration();
+builder.Services.Configure<GitHubTokenProviderOptions>(builder.Configuration.GetSection("GitHub"));
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -49,7 +54,6 @@ builder.Services.AddTransient<IRemoteFactory, DarcRemoteFactory>();
 builder.Services.AddTransient<ISystemClock, SystemClock>();
 builder.Services.AddTransient<IVersionDetailsParser, VersionDetailsParser>();
 builder.Services.AddTransient<OperationManager>();
-builder.Services.AddTransient<TemporaryFiles>();
 builder.Services.AddSingleton<IInstallationLookup, BuildAssetRegistryInstallationLookup>();
 builder.Services.AddSingleton<TemporaryFiles>();
 builder.Services.AddKustoClientProvider("Kusto");
