@@ -13,6 +13,7 @@ using Microsoft.DotNet.GitHub.Authentication;
 using Microsoft.DotNet.Internal.Logging;
 using Microsoft.DotNet.Kusto;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Internal;
 using Microsoft.Extensions.Logging.Console;
 using StackExchange.Redis;
@@ -55,7 +56,13 @@ builder.Services.AddKustoClientProvider("Kusto");
 builder.Services.AddGitHubTokenProvider();
 
 // SQL
-builder.Services.AddDbContext<BuildAssetRegistryContext>(options => options.UseSqlServer(builder.GetConnectionString("BuildAssetRegistry")));
+builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
+{
+    options.UseSqlServer(builder.GetConnectionString("BuildAssetRegistry"));
+
+    // Silence query execution logs
+    options.ConfigureWarnings(b => b.Log((RelationalEventId.CommandExecuted, LogLevel.Trace)));
+});
 
 // Redis
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(builder.GetConnectionString("Redis")));
