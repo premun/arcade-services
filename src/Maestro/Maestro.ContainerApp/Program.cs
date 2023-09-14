@@ -47,18 +47,19 @@ builder.Services.AddTransient<ISystemClock, SystemClock>();
 builder.Services.AddTransient<IVersionDetailsParser, VersionDetailsParser>();
 builder.Services.AddTransient<OperationManager>();
 builder.Services.AddTransient<TemporaryFiles>();
+builder.Services.AddSingleton<IInstallationLookup, BuildAssetRegistryInstallationLookup>();
+builder.Services.AddSingleton<TemporaryFiles>();
 builder.Services.AddKustoClientProvider("Kusto");
 builder.Services.AddGitHubTokenProvider();
 
+// SQL
 builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
 {
     options.UseSqlServer(builder.GetConnectionString("BuildAssetRegistry"));
 });
-builder.Services.AddSingleton<IInstallationLookup, BuildAssetRegistryInstallationLookup>();
 
-// singleton services
-builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(builder.GetConnectionString("Redis")));
-builder.Services.AddSingleton<TemporaryFiles>();
+// Redis
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(builder.GetConnectionString("Redis")));
 
 var app = builder.Build();
 
