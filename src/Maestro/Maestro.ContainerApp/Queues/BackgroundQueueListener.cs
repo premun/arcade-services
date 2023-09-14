@@ -71,11 +71,13 @@ internal class BackgroundQueueListener : BackgroundService
 
     private async Task ProcessItemAsync(BackgroundWorkItem item, CancellationToken cancellationToken)
     {
+        using IServiceScope scope = _serviceProvider.CreateScope();
+
         switch (item)
         {
             case StartSubscriptionUpdateWorkItem startSubscriptionUpdate:
                 {
-                    var processor = _serviceProvider.GetRequiredService<StartSubscriptionUpdateQueueProcessor>();
+                    var processor = scope.ServiceProvider.GetRequiredService<StartSubscriptionUpdateQueueProcessor>();
                     await processor.ProcessAsync(startSubscriptionUpdate, cancellationToken);
                     break;
                 }
@@ -90,7 +92,7 @@ internal class BackgroundQueueListener : BackgroundService
 
             case BuildCoherencyInfoWorkItem action:
                 {
-                    var processor = _serviceProvider.GetRequiredService<BuildCoherencyInfoQueueProcessor>();
+                    var processor = scope.ServiceProvider.GetRequiredService<BuildCoherencyInfoQueueProcessor>();
                     await processor.ProcessAsync(action, cancellationToken);
                     break;
                 }

@@ -55,10 +55,7 @@ builder.Services.AddKustoClientProvider("Kusto");
 builder.Services.AddGitHubTokenProvider();
 
 // SQL
-builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
-{
-    options.UseSqlServer(builder.GetConnectionString("BuildAssetRegistry"));
-});
+builder.Services.AddDbContext<BuildAssetRegistryContext>(options => options.UseSqlServer(builder.GetConnectionString("BuildAssetRegistry")));
 
 // Redis
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(builder.GetConnectionString("Redis")));
