@@ -6,8 +6,6 @@ using Maestro.ContainerApp.Queues;
 using Maestro.ContainerApp.Queues.WorkItems;
 using StackExchange.Redis;
 
-/// TODO: remove & fix issues
-#nullable disable
 namespace Maestro.ContainerApp.Actors;
 
 public interface IReminderManager
@@ -46,7 +44,9 @@ public class ReminderManager : IReminderManager
             return;
         }
 
-        var reminderMessage = JsonSerializer.Deserialize<ReminderArguments>(await Database.StringGetAsync(reminderName));
+        var reminderMessage = JsonSerializer.Deserialize<ReminderArguments>(reminderRecord!)
+            ?? throw new Exception("Reminder deserialization failed");
+
         var client = Queue.Create<PullRequestReminderWorkItem>();
         await client.DeleteAsync(reminderMessage.MessageId, reminderMessage.PopReceipt);
     }
