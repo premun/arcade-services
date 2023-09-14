@@ -4,13 +4,14 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Microsoft.ServiceFabric.Actors;
 
 namespace Maestro.Contracts;
 
-public interface IPullRequestActor : IActor
+public interface IPullRequestActor
 {
     Task UpdateAssetsAsync(Guid subscriptionId, int buildId, string sourceRepo, string sourceSha, List<Asset> assets);
 
     Task ProcessPendingUpdatesAsync();
+
+    //Task<(InProgressPullRequest pr, bool canUpdate)> SynchronizeInProgressPullRequestAsync();
 }

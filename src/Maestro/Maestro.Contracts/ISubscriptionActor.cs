@@ -2,11 +2,10 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Threading.Tasks;
-using Microsoft.ServiceFabric.Actors;
 
 namespace Maestro.Contracts;
 
-public interface ISubscriptionActor : IActor
+public interface ISubscriptionActor
 {
     Task<string> RunActionAsync(string method, string arguments);
     Task UpdateAsync(int buildId);

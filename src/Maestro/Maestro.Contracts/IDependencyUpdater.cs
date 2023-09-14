@@ -4,11 +4,10 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.ServiceFabric.Services.Remoting;
 
 namespace Maestro.Contracts;
 
-public interface IDependencyUpdater : IService
+public interface IDependencyUpdater
 {
     Task StartSubscriptionUpdateAsync(Guid subscription);
 
