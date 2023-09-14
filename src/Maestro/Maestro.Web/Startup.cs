@@ -220,7 +220,7 @@ public partial class Startup : StartupBase
         services.AddSingleton<IBackgroundQueue>(provider => provider.GetRequiredService<BackgroundQueue>());
         services.AddSingleton<IHostedService>(provider => provider.GetRequiredService<BackgroundQueue>());
 
-        services.AddServiceFabricService<IDependencyUpdater>("fabric:/MaestroApplication/DependencyUpdater");
+        //services.AddServiceFabricService<IDependencyUpdater>("fabric:/MaestroApplication/DependencyUpdater");
 
         services.AddGitHubTokenProvider();
         services.Configure<GitHubClientOptions>(o =>
