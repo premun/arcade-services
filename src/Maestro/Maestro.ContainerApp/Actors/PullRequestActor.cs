@@ -63,7 +63,7 @@ public abstract class PullRequestActor : IPullRequestActor
         _reminders = reminders;
 
         PullRequestRedisKey = PullRequest + _actorId.Id;
-        PullRequestUpdateRedisKey = PullRequest + _actorId.Id;
+        PullRequestUpdateRedisKey = PullRequestUpdate + _actorId.Id;
         PullRequestCheckRedisKey = PullRequestCheck + _actorId.Id;
         PullRequestCheckReminder = PullRequestCheckReminderPrefix + _actorId.Id;
         PullRequestUpdateReminder = PullRequestUpdateReminderPrefix + _actorId.Id;
