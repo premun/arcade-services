@@ -46,12 +46,12 @@ public static class VersionFiles
         return $"{GetVersionPropsElementBaseName(dependencyName)}{VersionDetailsParser.VersionPropsAlternateVersionElementSuffix}";
     }
 
-    public static string CalculateGlobalJsonElementName(string dependencyName)
+    public static string CalculateGlobalJsonNodeName(string dependencyName)
     {
         return dependencyName;
     }
 
-    public static string CalculateDotnetToolsJsonElementName(string dependencyName)
+    public static string CalculateDotnetToolsJsonNodeName(string dependencyName)
     {
         return dependencyName;
     }

@@ -2,8 +2,8 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Immutable;
+using System.Text.Json.Nodes;
 using Maestro.Data.Models;
-using Newtonsoft.Json.Linq;
 
 namespace Maestro.ContainerApp.Api.Models;
 
@@ -21,7 +21,7 @@ public class MergePolicy
 
     public string? Name { get; set; }
 
-    public IImmutableDictionary<string, JToken>? Properties { get; set; }
+    public IImmutableDictionary<string, JsonNode>? Properties { get; set; }
 
     public MergePolicyDefinition ToDb()
     {

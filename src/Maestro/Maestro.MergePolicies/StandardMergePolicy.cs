@@ -3,9 +3,9 @@
 
 using Maestro.Contracts;
 using Maestro.MergePolicyEvaluation;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 
 namespace Maestro.MergePolicies;
@@ -19,11 +19,11 @@ public class StandardMergePolicyBuilder : IMergePolicyBuilder
 
     static StandardMergePolicyBuilder()
     {
-        s_standardGitHubProperties = new MergePolicyProperties(new Dictionary<string, JToken>
+        s_standardGitHubProperties = new MergePolicyProperties(new Dictionary<string, JsonNode>
         {
             { 
                 MergePolicyConstants.IgnoreChecksMergePolicyPropertyName, 
-                new JArray(
+                new JsonArray(
                     "WIP",
                     "license/cla",
                     "auto-merge.config.enforce",
@@ -32,11 +32,11 @@ public class StandardMergePolicyBuilder : IMergePolicyBuilder
             },
         });
 
-        s_standardAzureDevOpsProperties = new MergePolicyProperties(new Dictionary<string, JToken>
+        s_standardAzureDevOpsProperties = new MergePolicyProperties(new Dictionary<string, JsonNode>
         {
             {
                 MergePolicyConstants.IgnoreChecksMergePolicyPropertyName,
-                new JArray(
+                new JsonArray(
                     "Comment requirements",
                     "Minimum number of reviewers",
                     "auto-merge.config.enforce",

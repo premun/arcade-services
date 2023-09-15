@@ -920,7 +920,7 @@ public class GitFileManager : IGitFileManager
 
     private void UpdateVersionGlobalJson(DependencyDetail itemToUpdate, JToken token)
     {
-        string versionElementName = VersionFiles.CalculateGlobalJsonElementName(itemToUpdate.Name);
+        string versionElementName = VersionFiles.CalculateGlobalJsonNodeName(itemToUpdate.Name);
 
         foreach (JProperty property in token.Children<JProperty>())
         {
@@ -1187,7 +1187,7 @@ public class GitFileManager : IGitFileManager
         bool result = true;
         foreach (var dependency in dependencies)
         {
-            string versionedName = VersionFiles.CalculateGlobalJsonElementName(dependency.Name);
+            string versionedName = VersionFiles.CalculateGlobalJsonNodeName(dependency.Name);
             JToken dependencyNode = FindDependency(rootToken, versionedName);
             if (dependencyNode != null)
             {
@@ -1241,7 +1241,7 @@ public class GitFileManager : IGitFileManager
         {
             foreach (var dependency in dependencies)
             {
-                string versionedName = VersionFiles.CalculateDotnetToolsJsonElementName(dependency.Name);
+                string versionedName = VersionFiles.CalculateDotnetToolsJsonNodeName(dependency.Name);
                 JToken dependencyNode = FindDependency(rootToken, versionedName);
                 if (dependencyNode != null)
                 {

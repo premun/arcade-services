@@ -3,9 +3,9 @@
 
 using System.Collections.Immutable;
 using System.Linq;
+using System.Text.Json.Nodes;
 using JetBrains.Annotations;
 using Maestro.Data.Models;
-using Newtonsoft.Json.Linq;
 
 namespace Maestro.Web.Api.v2018_07_16.Models;
 
@@ -24,7 +24,7 @@ public class MergePolicy
     public string Name { get; set; }
 
     [CanBeNull]
-    public IImmutableDictionary<string, JToken> Properties { get; set; }
+    public IImmutableDictionary<string, JsonNode> Properties { get; set; }
 
     public MergePolicyDefinition ToDb()
     {
