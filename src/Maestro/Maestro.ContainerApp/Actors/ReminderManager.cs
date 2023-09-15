@@ -38,7 +38,7 @@ public class ReminderManager : IReminderManager
 
     public async Task TryUnregisterReminderAsync(string reminderName)
     {
-        var reminderRecord = await _database.StringGetAsync(reminderName);
+        var reminderRecord = await _database.StringGetDeleteAsync(reminderName);
         if(reminderRecord == RedisValue.Null)
         {
             return;

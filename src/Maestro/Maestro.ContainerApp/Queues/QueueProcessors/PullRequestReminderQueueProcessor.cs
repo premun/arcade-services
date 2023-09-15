@@ -4,16 +4,24 @@
 using Maestro.ContainerApp.Actors;
 using Maestro.ContainerApp.Queues.WorkItems;
 using Maestro.Contracts;
+using StackExchange.Redis;
 
 namespace Maestro.ContainerApp.Queues.QueueProcessors;
 
 internal class PullRequestReminderQueueProcessor : QueueProcessor<PullRequestReminderWorkItem>
 {
     private readonly IActorFactory _actorFactory;
+    private readonly IConnectionMultiplexer _redis;
+    private readonly IDatabase _database;
 
-    public PullRequestReminderQueueProcessor(ILogger<PullRequestReminderQueueProcessor> logger, IActorFactory actorFactory) : base(logger)
+    public PullRequestReminderQueueProcessor(
+        ILogger<PullRequestReminderQueueProcessor> logger,
+        IActorFactory actorFactory,
+        IConnectionMultiplexer redis) : base(logger)
     {
         _actorFactory = actorFactory;
+        _redis = redis;
+        _database = _redis.GetDatabase();
     }
 
     protected override async Task ProcessAsyncInternal(PullRequestReminderWorkItem workItem, CancellationToken cancellationToken)
@@ -40,5 +48,7 @@ internal class PullRequestReminderQueueProcessor : QueueProcessor<PullRequestRem
         {
             await pullRequestActor.ProcessPendingUpdatesAsync();
         }
+
+        await _database.StringGetDeleteAsync(workItem.Name);
     }
 }
