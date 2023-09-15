@@ -37,6 +37,7 @@ internal class PullRequestReminderQueueProcessor : QueueProcessor<PullRequestRem
         }
         else
         {
+            await _database.StringGetDeleteAsync(workItem.Name);
             throw new ArgumentException("Cannot create PullRequestActor, ActorId is invalid");
         }
 
