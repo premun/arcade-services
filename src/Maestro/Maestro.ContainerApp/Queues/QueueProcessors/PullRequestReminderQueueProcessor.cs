@@ -26,6 +26,8 @@ internal class PullRequestReminderQueueProcessor : QueueProcessor<PullRequestRem
 
     protected override async Task ProcessAsyncInternal(PullRequestReminderWorkItem workItem, CancellationToken cancellationToken)
     {
+        await _database.StringGetDeleteAsync(workItem.Name);
+
         IPullRequestActor pullRequestActor;
         if (workItem.Repository != null && workItem.Branch != null)
         {
@@ -37,7 +39,6 @@ internal class PullRequestReminderQueueProcessor : QueueProcessor<PullRequestRem
         }
         else
         {
-            await _database.StringGetDeleteAsync(workItem.Name);
             throw new ArgumentException("Cannot create PullRequestActor, ActorId is invalid");
         }
 
@@ -49,7 +50,5 @@ internal class PullRequestReminderQueueProcessor : QueueProcessor<PullRequestRem
         {
             await pullRequestActor.ProcessPendingUpdatesAsync();
         }
-
-        await _database.StringGetDeleteAsync(workItem.Name);
     }
 }
