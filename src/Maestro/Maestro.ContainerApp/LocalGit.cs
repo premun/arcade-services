@@ -10,9 +10,13 @@ public interface ILocalGit
 
 public class LocalGit : ILocalGit
 {
+    public const string GIT_PATH_ENV_VAR_NAME = "GIT_PATH_ENV_VAR_NAME";
+
     public string GetPathToLocalGit()
     {
-        var gitExePath = EnvironmentVariables.GIT_PATH_ENV_VAR_NAME;
+        var gitExePath = Environment.GetEnvironmentVariable(GIT_PATH_ENV_VAR_NAME)
+            ?? @"C:\Program Files\Git\cmd\git.exe";
+
         if (!File.Exists(gitExePath))
         {
             throw new InvalidOperationException(
