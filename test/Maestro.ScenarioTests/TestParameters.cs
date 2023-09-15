@@ -33,7 +33,7 @@ namespace Maestro.ScenarioTests
             string maestroBaseUri = Environment.GetEnvironmentVariable("MAESTRO_BASEURI") ??  userSecrets.MaestroBaseUri ?? "https://maestro-int.westus2.cloudapp.azure.com";
             string maestroToken = Environment.GetEnvironmentVariable("MAESTRO_TOKEN") ?? userSecrets.MaestroToken;
             string githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN") ?? userSecrets.GitHubToken;
-            string darcPackageSource = Environment.GetEnvironmentVariable("DARC_PACKAGE_SOURCE");
+            string darcPackageSource = Environment.GetEnvironmentVariable("DARC_PACKAGE_SOURCE") ?? userSecrets.DarcPackageSource;
             string azdoToken = Environment.GetEnvironmentVariable("AZDO_TOKEN") ?? userSecrets.AzDoToken;
 
             var testDir = TemporaryDirectory.Get();
@@ -87,6 +87,8 @@ namespace Maestro.ScenarioTests
             AzDoClient = azdoClient;
             AzDoToken = azdoToken;
         }
+
+        public string DarcPackageSource { get; set; }
 
         public string DarcExePath { get; set; }
 
