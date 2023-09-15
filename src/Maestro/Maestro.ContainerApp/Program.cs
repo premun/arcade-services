@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Reflection;
+using System.Text.Json.Serialization;
 using Maestro.AzureDevOps;
 using Maestro.ContainerApp;
 using Maestro.ContainerApp.Actors;
@@ -35,7 +36,15 @@ builder.Services.Configure<GitHubClientOptions>(options =>
 });
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        var enumConverter = new JsonStringEnumConverter();
+        options.JsonSerializerOptions.Converters.Add(enumConverter);
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase));
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    });
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddLogging(b =>

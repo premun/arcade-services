@@ -11,6 +11,7 @@ using Maestro.ContainerApp.Queues.WorkItems;
 using Microsoft.AspNetCore.ApiVersioning;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.DotNet.GitHub.Authentication;
 
 namespace Maestro.ContainerApp.Api.Controllers;
