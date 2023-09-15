@@ -58,10 +58,8 @@ builder.AddBackgroudQueueProcessors();
 builder.Services.AddTransient<IActorFactory, ActorFactory>();
 builder.Services.AddTransient<DarcRemoteMemoryCache>();
 builder.Services.AddTransient<Microsoft.DotNet.Services.Utility.ExponentialRetry>();
-builder.Services.AddTransient<IAzureDevOpsTokenProvider, AzureDevOpsTokenProvider>();
 builder.Services.AddTransient<IBarClient, MaestroBarClient>();
 builder.Services.AddTransient<IDependencyUpdater, DependencyUpdater>();
-builder.Services.AddTransient<IGitHubAppTokenProvider, GitHubAppTokenProvider>();
 builder.Services.AddTransient<IGitHubClientFactory, GitHubClientFactory>();
 builder.Services.AddTransient<IGitHubTokenProvider, GitHubTokenProvider>();
 builder.Services.AddTransient<IInstallationLookup, InMemoryCacheInstallationLookup>();
@@ -75,7 +73,19 @@ builder.Services.AddTransient<OperationManager>();
 builder.Services.AddSingleton<IInstallationLookup, BuildAssetRegistryInstallationLookup>();
 builder.Services.AddSingleton<TemporaryFiles>();
 builder.Services.AddKustoClientProvider("Kusto");
+
+// Tokens
 builder.Services.AddGitHubTokenProvider();
+builder.Services.AddTransient<IAzureDevOpsTokenProvider, AzureDevOpsTokenProvider>();
+builder.Services.Configure<AzureDevOpsTokenProviderOptions>(
+    (options, provider) =>
+    {
+        var tokenMap = builder.Configuration.GetSection("AzureDevOps:Tokens").GetChildren();
+        foreach (IConfigurationSection token in tokenMap)
+        {
+            options.Tokens.Add(token.GetValue<string>("Account"), token.GetValue<string>("Token"));
+        }
+    });
 
 // SQL
 builder.Services.AddDbContext<BuildAssetRegistryContext>(options =>
