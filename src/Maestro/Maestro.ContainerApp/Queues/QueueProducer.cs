@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Text.Json;
+using Azure;
 using Azure.Storage.Queues;
 using Azure.Storage.Queues.Models;
 using Maestro.ContainerApp.Queues.WorkItems;
@@ -29,6 +30,13 @@ public class QueueProducer<T> where T : BackgroundWorkItem
     public async Task DeleteAsync(string messageId, string popReceipt)
     {
         var client = _queueClient.GetQueueClient(_queueName);
-        await client.DeleteMessageAsync(messageId, popReceipt);
+        try
+        {
+            await client.DeleteMessageAsync(messageId, popReceipt);
+        }
+        catch(RequestFailedException)
+        {
+            //message not found
+        }
     }
 }
