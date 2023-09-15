@@ -19,17 +19,22 @@ namespace Maestro.ScenarioTests
     {
         internal readonly TemporaryDirectory _dir;
 
+        public TestParameters()
+        {
+        }
+
         public static async Task<TestParameters> GetAsync()
         {
-            IConfiguration userSecrets = new ConfigurationBuilder()
+            TestParameters userSecrets = new ConfigurationBuilder()
                 .AddUserSecrets<TestParameters>()
-                .Build();
+                .Build()
+                .Get<TestParameters>();
 
-            string maestroBaseUri = Environment.GetEnvironmentVariable("MAESTRO_BASEURI") ??  userSecrets["MAESTRO_BASEURI"] ?? "https://maestro-int.westus2.cloudapp.azure.com";
-            string maestroToken = Environment.GetEnvironmentVariable("MAESTRO_TOKEN") ?? userSecrets["MAESTRO_TOKEN"];
-            string githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN") ?? userSecrets["GITHUB_TOKEN"];
+            string maestroBaseUri = Environment.GetEnvironmentVariable("MAESTRO_BASEURI") ??  userSecrets.MaestroBaseUri ?? "https://maestro-int.westus2.cloudapp.azure.com";
+            string maestroToken = Environment.GetEnvironmentVariable("MAESTRO_TOKEN") ?? userSecrets.MaestroToken;
+            string githubToken = Environment.GetEnvironmentVariable("GITHUB_TOKEN") ?? userSecrets.GitHubToken;
             string darcPackageSource = Environment.GetEnvironmentVariable("DARC_PACKAGE_SOURCE");
-            string azdoToken = Environment.GetEnvironmentVariable("AZDO_TOKEN") ?? userSecrets["AZDO_TOKEN"];
+            string azdoToken = Environment.GetEnvironmentVariable("AZDO_TOKEN") ?? userSecrets.AzDoToken;
 
             var testDir = TemporaryDirectory.Get();
             var testDirSharedWrapper = Shareable.Create(testDir);
@@ -83,35 +88,35 @@ namespace Maestro.ScenarioTests
             AzDoToken = azdoToken;
         }
 
-        public string DarcExePath { get; }
+        public string DarcExePath { get; set; }
 
-        public string GitExePath { get; }
+        public string GitExePath { get; set; }
 
-        public string GitHubUser { get; } = "dotnet-maestro-bot";
+        public string GitHubUser { get; set; } = "dotnet-maestro-bot";
 
-        public string GitHubTestOrg { get; } = "maestro-auth-test";
+        public string GitHubTestOrg { get; set; } = "maestro-auth-test";
 
-        public string MaestroBaseUri { get; }
+        public string MaestroBaseUri { get; set; }
 
-        public string MaestroToken { get; }
+        public string MaestroToken { get; set; }
 
-        public string GitHubToken { get; }
+        public string GitHubToken { get; set; }
 
-        public IMaestroApi MaestroApi { get; }
+        public IMaestroApi MaestroApi { get; set; }
 
-        public GitHubClient GitHubApi { get; }
+        public GitHubClient GitHubApi { get; set; }
 
-        public Microsoft.DotNet.DarcLib.AzureDevOpsClient AzDoClient { get; }
+        public Microsoft.DotNet.DarcLib.AzureDevOpsClient AzDoClient { get; set; }
 
-        public int AzureDevOpsBuildDefinitionId { get; } = 6;
+        public int AzureDevOpsBuildDefinitionId { get; set; } = 6;
 
-        public int AzureDevOpsBuildId { get; } = 144618;
+        public int AzureDevOpsBuildId { get; set; } = 144618;
 
-        public string AzureDevOpsAccount { get; } = "dnceng";
+        public string AzureDevOpsAccount { get; set; } = "dnceng";
 
-        public string AzureDevOpsProject { get; } = "internal";
+        public string AzureDevOpsProject { get; set; } = "internal";
 
-        public string AzDoToken { get; }
+        public string AzDoToken { get; set; }
 
         public void Dispose()
         {
