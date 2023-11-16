@@ -39,8 +39,10 @@ stages:
   dependsOn:
   - build
   - approval
+
   variables:
   - group: ${{ parameters.VariableGroup }}
+
   jobs:
   - job: updateDatabase
     displayName: Update BuildAssetRegistry database
