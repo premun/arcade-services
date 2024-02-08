@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -21,6 +22,8 @@ namespace Microsoft.DotNet.DarcLib;
 /// </summary>
 public class LocalGitClient : ILocalGitClient
 {
+    private const string AutoCrlfConfigSetting = "core.autocrlf";
+
     private readonly RemoteConfiguration _remoteConfiguration;
     private readonly IProcessManager _processManager;
     private readonly IFileSystem _fileSystem;
@@ -82,9 +85,15 @@ public class LocalGitClient : ILocalGitClient
     {
         relativePath ??= UnixPath.CurrentDir;
 
-        // After we apply the diff to the index, working tree won't have the files so they will be missing
-        // We have to reset working tree to the index then
-        // This will end up having the working tree match what is staged
+        // On Windows, change autocrlf to false to avoid changing line endings
+        string? crlf = null;
+        bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        if (isWindows)
+        {
+            crlf = await GetConfigValue(repoPath, AutoCrlfConfigSetting);
+            await SetConfigValue(repoPath, AutoCrlfConfigSetting, "false");
+        }
+
         _logger.LogInformation("Cleaning the working tree directory {path}...", repoPath / relativePath);
         var args = new string[] { "checkout", relativePath };
         var result = await _processManager.ExecuteGit(repoPath, args, cancellationToken: CancellationToken.None);
@@ -107,6 +116,11 @@ public class LocalGitClient : ILocalGitClient
                 _logger.LogInformation("A removed submodule detected. Removing files at {path}...", relativePath);
                 _fileSystem.DeleteDirectory(repoPath / relativePath, true);
             }
+        }
+        
+        if (isWindows)
+        {
+            await SetConfigValue(repoPath, AutoCrlfConfigSetting, crlf!);
         }
 
         // Also remove untracked files (in case files were removed in index)
@@ -433,5 +447,18 @@ public class LocalGitClient : ILocalGitClient
             GitRepoType t => throw new Exception($"Cannot set authorization header for repo of type {t}"),
         };
         envVars["GIT_TERMINAL_PROMPT"] = "0";
+    }
+
+    public async Task<string> GetConfigValue(string repoPath, string setting)
+    {
+        var res = await _processManager.ExecuteGit(repoPath, "config", setting);
+        res.ThrowIfFailed($"Failed to determine {setting} value for {repoPath}");
+        return res.StandardOutput.Trim();
+    }
+
+    public async Task SetConfigValue(string repoPath, string setting, string value)
+    {
+        var res = await _processManager.ExecuteGit(repoPath, "config", setting, value);
+        res.ThrowIfFailed($"Failed to set {setting} value to {value} for {repoPath}");
     }
 }

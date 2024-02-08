@@ -149,5 +149,21 @@ public interface ILocalGitClient
     /// </summary>
     /// <param name="args">Where to add the new argument into</param>
     /// <param name="envVars">Where to add the new variables into</param>
-    public void AddGitAuthHeader(IList<string> args, IDictionary<string, string> envVars, string repoUri);
+    void AddGitAuthHeader(IList<string> args, IDictionary<string, string> envVars, string repoUri);
+
+    /// <summary>
+    /// Gets a value of a given git configuration setting.
+    /// </summary>
+    /// <param name="repoPath">Path to a git repository</param>
+    /// <param name="setting">Name of the setting</param>
+    /// <returns>Value of the setting</returns>
+    Task<string> GetConfigValue(string repoPath, string setting);
+
+    /// <summary>
+    /// Sets a value of a given git configuration setting.
+    /// </summary>
+    /// <param name="repoPath">Path to a git repository</param>
+    /// <param name="setting">Name of the setting</param>
+    /// <param name="value">New value</param>
+    Task SetConfigValue(string repoPath, string setting, string value);
 }

@@ -311,6 +311,9 @@ public class VmrPatchHandler : IVmrPatchHandler
             _fileSystem.DeleteFile(patch.Path);
         }
 
+        // After we apply the diff to the index, working tree won't have the files so they will be missing
+        // We have to reset working tree to the index then
+        // This will end up having the working tree match what is staged
         await _localGitClient.ResetWorkingTree(targetDirectory, patch.ApplicationPath);
     }
 
