@@ -57,6 +57,11 @@ public class ProcessManager : IProcessManager
         GitExecutable = gitExecutable;
     }
 
+    public ProcessManager(ILogger<ProcessManager> logger, string gitExecutable)
+        : this((ILogger)logger, gitExecutable)
+    {
+    }
+
     public Task<ProcessExecutionResult> ExecuteGit(
         string repoPath,
         string[] arguments,
