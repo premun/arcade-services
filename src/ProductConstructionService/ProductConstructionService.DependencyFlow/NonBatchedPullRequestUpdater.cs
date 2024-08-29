@@ -33,7 +33,6 @@ internal class NonBatchedPullRequestUpdater : PullRequestUpdater
         IPullRequestPolicyFailureNotifier pullRequestPolicyFailureNotifier,
         IRedisCacheFactory cacheFactory,
         IReminderManagerFactory reminderManagerFactory,
-        IWorkItemProducerFactory workItemProducerFactory,
         ILogger<NonBatchedPullRequestUpdater> logger)
         : base(
             id,
@@ -44,7 +43,6 @@ internal class NonBatchedPullRequestUpdater : PullRequestUpdater
             pullRequestBuilder,
             cacheFactory,
             reminderManagerFactory,
-            workItemProducerFactory,
             logger)
     {
         _lazySubscription = new Lazy<Task<Subscription?>>(RetrieveSubscription);

@@ -29,7 +29,6 @@ internal class BatchedPullRequestUpdater : PullRequestUpdater
         IPullRequestBuilder pullRequestBuilder,
         IRedisCacheFactory cacheFactory,
         IReminderManagerFactory reminderManagerFactory,
-        IWorkItemProducerFactory workItemProducerFactory,
         ILogger<BatchedPullRequestUpdater> logger)
         : base(
             id,
@@ -40,7 +39,6 @@ internal class BatchedPullRequestUpdater : PullRequestUpdater
             pullRequestBuilder,
             cacheFactory,
             reminderManagerFactory,
-            workItemProducerFactory,
             logger)
     {
         _id = id;

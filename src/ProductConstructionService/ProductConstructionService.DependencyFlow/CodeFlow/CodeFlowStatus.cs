@@ -4,7 +4,7 @@
 using System.Runtime.Serialization;
 
 #nullable disable
-namespace ProductConstructionService.DependencyFlow;
+namespace ProductConstructionService.DependencyFlow.CodeFlow;
 
 [DataContract]
 public class CodeFlowStatus

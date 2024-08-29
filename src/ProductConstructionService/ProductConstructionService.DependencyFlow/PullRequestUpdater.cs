@@ -3,11 +3,15 @@
 
 using System.Net;
 using Maestro.Contracts;
+using Maestro.Data;
 using Maestro.Data.Models;
 using Maestro.MergePolicyEvaluation;
 using Microsoft.DotNet.DarcLib;
+using Microsoft.DotNet.DarcLib.Helpers;
+using Microsoft.DotNet.DarcLib.VirtualMonoRepo;
 using Microsoft.Extensions.Logging;
 using ProductConstructionService.Common;
+using ProductConstructionService.DependencyFlow.CodeFlow;
 using ProductConstructionService.DependencyFlow.WorkItems;
 using ProductConstructionService.WorkItems;
 
@@ -24,13 +28,18 @@ internal abstract class PullRequestUpdater : IPullRequestUpdater
     private static readonly TimeSpan DefaultReminderDuration = TimeSpan.FromMinutes(5);
 
     private readonly PullRequestUpdaterId _id;
+    private readonly IBasicBarClient _barClient;
+    private readonly BuildAssetRegistryContext _context;
     private readonly IMergePolicyEvaluator _mergePolicyEvaluator;
     private readonly IRemoteFactory _remoteFactory;
     private readonly IPullRequestUpdaterFactory _updaterFactory;
     private readonly ICoherencyUpdateResolver _coherencyUpdateResolver;
     private readonly IPullRequestBuilder _pullRequestBuilder;
-    // TODO (https://github.com/dotnet/arcade-services/issues/3866): When removed, remove the mocks from tests
-    private readonly IWorkItemProducerFactory _workItemProducerFactory;
+    private readonly IPcsVmrBackFlower _vmrBackFlower;
+    private readonly IPcsVmrForwardFlower _vmrForwardFlower;
+    private readonly ILocalLibGit2Client _gitClient;
+    private readonly ITelemetryRecorder _telemetryRecorder;
+    private readonly IVmrInfo _vmrInfo;
     private readonly ILogger _logger;
 
     protected readonly IReminderManager<SubscriptionUpdateWorkItem> _pullRequestUpdateReminders;
@@ -43,6 +52,7 @@ internal abstract class PullRequestUpdater : IPullRequestUpdater
     /// </summary>
     public PullRequestUpdater(
         PullRequestUpdaterId id,
+        IBasicBarClient barClient,
         IMergePolicyEvaluator mergePolicyEvaluator,
         IRemoteFactory remoteFactory,
         IPullRequestUpdaterFactory updaterFactory,
@@ -50,16 +60,26 @@ internal abstract class PullRequestUpdater : IPullRequestUpdater
         IPullRequestBuilder pullRequestBuilder,
         IRedisCacheFactory cacheFactory,
         IReminderManagerFactory reminderManagerFactory,
-        IWorkItemProducerFactory workItemProducerFactory,
+        IPcsVmrBackFlower vmrBackFlower,
+        IPcsVmrForwardFlower vmrForwardFlower,
+        ILocalLibGit2Client gitClient,
+        ITelemetryRecorder telemetryRecorder,
+        IVmrInfo vmrInfo,
         ILogger logger)
     {
         _id = id;
+        _barClient = barClient;
+        _context = context;
         _mergePolicyEvaluator = mergePolicyEvaluator;
         _remoteFactory = remoteFactory;
         _updaterFactory = updaterFactory;
         _coherencyUpdateResolver = coherencyUpdateResolver;
         _pullRequestBuilder = pullRequestBuilder;
-        _workItemProducerFactory = workItemProducerFactory;
+        _vmrBackFlower = vmrBackFlower;
+        _vmrForwardFlower = vmrForwardFlower;
+        _gitClient = gitClient;
+        _telemetryRecorder = telemetryRecorder;
+        _vmrInfo = vmrInfo;
         _logger = logger;
 
         _pullRequestUpdateReminders = reminderManagerFactory.CreateReminderManager<SubscriptionUpdateWorkItem>(id.Id);
@@ -896,21 +916,10 @@ internal abstract class PullRequestUpdater : IPullRequestUpdater
                 PrUrl = pr.Url,
             });
 
-            codeFlowStatus.SourceSha = update.SourceSha;
+            await UpdateAssetsAndSourcesAsync(update, codeFlowStatus.PrBranch, pr);
 
-            // TODO (https://github.com/dotnet/arcade-services/issues/3866): We need to update the InProgressPullRequest fully, assets and other info just like we do in UpdatePullRequestAsync
-            // Right now, we are not flowing packages in codeflow subscriptions yet, so this functionality is no there
-            // For now, we manually update the info the unit tests expect
-            pr.ContainedSubscriptions.Clear();
-            pr.ContainedSubscriptions.Add(new SubscriptionPullRequestUpdate
-            {
-                SubscriptionId = update.SubscriptionId,
-                BuildId = update.BuildId
-            });
-
-            await _codeFlowState.SetAsync(codeFlowStatus);
-            await SetPullRequestCheckReminder(pr);
-            await _pullRequestUpdateReminders.UnsetReminderAsync();
+            _logger.LogInformation("New code flow changes requested");
+            return true;
         }
         catch (Exception e)
         {
@@ -918,10 +927,8 @@ internal abstract class PullRequestUpdater : IPullRequestUpdater
             _logger.LogError(e, "Failed to request branch update for PR {url} for subscription {subscriptionId}",
                 pr.Url,
                 update.SubscriptionId);
+            return false;
         }
-
-        _logger.LogInformation("New code flow changes requested");
-        return true;
     }
 
     private async Task<bool> RequestCodeFlowBranchAsync(SubscriptionUpdateWorkItem update, string targetBranch)
@@ -1018,6 +1025,108 @@ internal abstract class PullRequestUpdater : IPullRequestUpdater
             await darcRemote.DeleteBranchAsync(targetRepository, prBranch);
             throw;
         }
+    }
+
+    private async Task<bool> UpdateAssetsAndSourcesAsync(
+        SubscriptionUpdateWorkItem update,
+        string prBranch,
+        InProgressPullRequest? pr)
+    {
+        Microsoft.DotNet.Maestro.Client.Models.Subscription? subscription = await _barClient.GetSubscriptionAsync(update.SubscriptionId);
+        if (subscription == null)
+        {
+            _logger.LogError("Subscription {subscriptionId} not found", update.SubscriptionId);
+            return false;
+        }
+
+        if (!subscription.SourceEnabled || (subscription.SourceDirectory ?? subscription.TargetDirectory) == null)
+        {
+            _logger.LogError("Subscription {subscriptionId} is not source enabled or source directory is not set", update.SubscriptionId);
+            return false;
+        }
+
+        Microsoft.DotNet.Maestro.Client.Models.Build? build = await _barClient.GetBuildAsync(update.BuildId);
+
+        if (build == null)
+        {
+            _logger.LogError("Build {buildId} not found", update.BuildId);
+            return false;
+        }
+
+        var isForwardFlow = subscription.TargetDirectory != null;
+
+        _logger.LogInformation(
+            "{direction}-flowing build {buildId} for subscription {subscriptionId} targeting {repo} / {targetBranch} to new branch {newBranch}",
+            isForwardFlow ? "Forward" : "Back",
+            build.Id,
+            subscription.Id,
+            subscription.TargetRepository,
+            subscription.TargetBranch,
+            prBranch);
+
+        bool hadUpdates;
+        NativePath targetRepo;
+
+        try
+        {
+            if (isForwardFlow)
+            {
+                targetRepo = _vmrInfo.VmrPath;
+                hadUpdates = await _vmrForwardFlower.FlowForwardAsync(
+                    subscription.TargetDirectory!,
+                    build,
+                    subscription.TargetBranch,
+                    prBranch,
+                    CancellationToken.None);
+            }
+            else
+            {
+                (hadUpdates, targetRepo) = await _vmrBackFlower.FlowBackAsync(
+                    subscription.SourceDirectory!,
+                    build,
+                    subscription.TargetBranch,
+                    prBranch,
+                    CancellationToken.None);
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Failed to flow changes for build {buildId} in subscription {subscriptionId}",
+                build.Id,
+                subscription.Id);
+            throw;
+        }
+
+        if (!hadUpdates)
+        {
+            _logger.LogInformation("There were no code-flow updates for subscription {subscriptionId}",
+                subscription.Id);
+            return true;
+        }
+
+        _logger.LogInformation("Code changes for {subscriptionId} ready in local branch {branch}",
+            subscription.Id,
+            subscription.TargetBranch);
+
+        // TODO https://github.com/dotnet/arcade-services/issues/3318: Handle failures (conflict, non-ff etc)
+        using (var scope = _telemetryRecorder.RecordGitOperation(TrackedGitOperation.Push, subscription.TargetRepository))
+        {
+            await _gitClient.Push(targetRepo, prBranch, subscription.TargetRepository);
+            scope.SetSuccess();
+        }
+
+        // When no PR is created yet, we notify Maestro that the branch is ready
+        if (pr.PrUrl == null)
+        {
+            _logger.LogInformation(
+                "Notifying Maestro that subscription code changes for {subscriptionId} are ready in local branch {branch}",
+                subscription.Id,
+                subscription.TargetBranch);
+
+            await _maestroApi.Subscriptions.TriggerSubscriptionAsync(update.BuildId, subscription.Id, default);
+        }
+
+        return true;
     }
 
     #endregion
