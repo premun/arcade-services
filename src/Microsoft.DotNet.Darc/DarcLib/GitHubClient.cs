@@ -1,14 +1,9 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
-using Octokit;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -17,11 +12,16 @@ using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using Microsoft.DotNet.Services.Utility;
-using System.Collections.Immutable;
-using Maestro.MergePolicyEvaluation;
 using Maestro.Common;
+using Maestro.MergePolicyEvaluation;
 using Microsoft.DotNet.DarcLib.Helpers;
+using Microsoft.DotNet.Services.Utility;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
+using Octokit;
 
 #nullable enable
 namespace Microsoft.DotNet.DarcLib;
@@ -40,11 +40,17 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     private static readonly Regex PullRequestUriPattern =
         new(@"^/repos/(?<owner>[^/]+)/(?<repo>[^/]+)/pulls/(?<id>\d+)$");
 
+    private readonly string _repoUri;
+    private readonly string _repoOwner;
+    private readonly string _repoName;
+
     private readonly IRemoteTokenProvider _tokenProvider;
     private readonly ILogger _logger;
     private readonly JsonSerializerSettings _serializerSettings;
     private readonly string _userAgent = $"DarcLib-{DarcLibVersion}";
-    private IGitHubClient? _lazyClient = null;
+    private readonly Lazy<IGitHubClient> _lazyClient;
+
+    private IGitHubClient Client => _lazyClient.Value;
 
     static GitHubClient()
     {
@@ -55,22 +61,26 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     }
 
     public GitHubClient(
+        string repoUri,
         IRemoteTokenProvider remoteTokenProvider,
         IProcessManager processManager,
         ILogger logger,
         IMemoryCache? cache)
-        : this(remoteTokenProvider, processManager, logger, null, cache)
+        : this(repoUri, remoteTokenProvider, processManager, logger, null, cache)
     {
     }
 
     public GitHubClient(
+        string repoUri,
         IRemoteTokenProvider remoteTokenProvider,
         IProcessManager processManager,
         ILogger logger,
         string? temporaryRepositoryPath,
         IMemoryCache? cache)
-        : base(remoteTokenProvider, processManager, temporaryRepositoryPath, cache, logger)
+        : base(repoUri, remoteTokenProvider, processManager, temporaryRepositoryPath, cache, logger)
     {
+        _repoUri = repoUri;
+        (_repoOwner, _repoName) = ParseRepoUri(repoUri);
         _tokenProvider = remoteTokenProvider;
         _logger = logger;
         _serializerSettings = new JsonSerializerSettings
@@ -78,6 +88,8 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             ContractResolver = new CamelCasePropertyNamesContractResolver(),
             NullValueHandling = NullValueHandling.Ignore
         };
+
+        _lazyClient = new Lazy<IGitHubClient>(() => CreateGitHubClient(_repoUri));
     }
 
     public bool AllowRetries { get; set; } = true;
@@ -86,35 +98,20 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     ///     Retrieve the contents of a repository file as a string
     /// </summary>
     /// <param name="filePath">Path to file</param>
-    /// <param name="repoUri">Repository URI</param>
     /// <param name="branch">Branch to get file contents from</param>
     /// <returns>File contents or throws on file not found.</returns>
-    public async Task<string> GetFileContentsAsync(string filePath, string repoUri, string branch)
-    {
-        (string owner, string repo) = ParseRepoUri(repoUri);
-        return await GetFileContentsAsync(owner, repo, filePath, branch);
-    }
-
-    /// <summary>
-    ///     Retrieve the contents of a repository file as a string
-    /// </summary>
-    /// <param name="filePath">Path to file</param>
-    /// <param name="owner">Owner of repo</param>
-    /// <param name="repo">Repo name</param>
-    /// <param name="branch">Branch to get file contents from</param>
-    /// <returns>File contents or throws on file not found.</returns>
-    private async Task<string> GetFileContentsAsync(string owner, string repo, string filePath, string branch)
+    public async Task<string> GetFileContentsAsync(string filePath, string branch)
     {
         _logger.LogInformation(
-            $"Getting the contents of file '{filePath}' from repo '{owner}/{repo}' in branch '{branch}'...");
+            $"Getting the contents of file '{filePath}' from repo '{_repoOwner}/{_repoName}' in branch '{branch}'...");
 
         JObject responseContent;
         try
         {
             using (HttpResponseMessage response = await ExecuteRemoteGitCommandAsync(
                        HttpMethod.Get,
-                       $"https://github.com/{owner}/{repo}",
-                       $"repos/{owner}/{repo}/contents/{filePath}?ref={branch}",
+                       _repoUri,
+                       $"repos/{_repoOwner}/{_repoName}/contents/{filePath}?ref={branch}",
                        _logger,
                        logFailure: false))
             {
@@ -124,13 +121,13 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             var content = responseContent["content"]!.ToString();
 
             _logger.LogInformation(
-                $"Getting the contents of file '{filePath}' from repo '{owner}/{repo}' in branch '{branch}' succeeded!");
+                $"Getting the contents of file '{filePath}' from repo '{_repoOwner}/{_repoName}' in branch '{branch}' succeeded!");
 
             return this.GetDecodedContent(content);
         }
-        catch (HttpRequestException reqEx) when (reqEx.Message.Contains(((int) HttpStatusCode.NotFound).ToString()))
+        catch (HttpRequestException reqEx) when (reqEx.Message.Contains(((int)HttpStatusCode.NotFound).ToString()))
         {
-            throw new DependencyFileNotFoundException(filePath, $"{owner}/{repo}", branch, reqEx);
+            throw new DependencyFileNotFoundException(filePath, $"{_repoOwner}/{_repoName}", branch, reqEx);
         }
     }
 
@@ -141,13 +138,12 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     /// <param name="newBranch">New branch name</param>
     /// <param name="baseBranch">Base of new branch</param>
     /// <returns></returns>
-    public async Task CreateBranchAsync(string repoUri, string newBranch, string baseBranch)
+    public async Task CreateBranchAsync(string newBranch, string baseBranch)
     {
         _logger.LogInformation(
-            $"Verifying if '{newBranch}' branch exists in repo '{repoUri}'. If not, we'll create it...");
+            $"Verifying if '{newBranch}' branch exists in repo '{_repoUri}'. If not, we'll create it...");
 
-        (string owner, string repo) = ParseRepoUri(repoUri);
-        string? latestSha = await GetLastCommitShaAsync(owner, repo, baseBranch);
+        string? latestSha = await GetLastCommitShaAsync(baseBranch);
         string body;
 
         var gitRef = $"refs/heads/{newBranch}";
@@ -159,8 +155,8 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
 
             using (await ExecuteRemoteGitCommandAsync(
                        HttpMethod.Get,
-                       $"https://github.com/{owner}/{repo}",
-                       $"repos/{owner}/{repo}/branches/{newBranch}",
+                       _repoUri,
+                       $"repos/{_repoOwner}/{_repoName}/branches/{newBranch}",
                        _logger,
                        retryCount: 0)) { }
 
@@ -168,33 +164,33 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             body = JsonConvert.SerializeObject(githubRef, _serializerSettings);
             using (await ExecuteRemoteGitCommandAsync(
                        new HttpMethod("PATCH"),
-                       $"https://github.com/{owner}/{repo}",
-                       $"repos/{owner}/{repo}/git/{gitRef}",
+                       _repoUri,
+                       $"repos/{_repoOwner}/{_repoName}/git/{gitRef}",
                        _logger,
                        body)) { }
 
             _logger.LogInformation($"Branch '{newBranch}' exists, updated");
         }
-        catch (HttpRequestException exc) when (exc.Message.Contains(((int) HttpStatusCode.NotFound).ToString()))
+        catch (HttpRequestException exc) when (exc.Message.Contains(((int)HttpStatusCode.NotFound).ToString()))
         {
             _logger.LogInformation($"'{newBranch}' branch doesn't exist. Creating it...");
 
             body = JsonConvert.SerializeObject(githubRef, _serializerSettings);
             using (await ExecuteRemoteGitCommandAsync(
                        HttpMethod.Post,
-                       $"https://github.com/{owner}/{repo}",
-                       $"repos/{owner}/{repo}/git/refs",
+                       _repoUri,
+                       $"repos/{_repoOwner}/{_repoName}/git/refs",
                        _logger,
                        body)) { }
 
-            _logger.LogInformation($"Branch '{newBranch}' created in repo '{repoUri}'!");
+            _logger.LogInformation($"Branch '{newBranch}' created in repo '{_repoUri}'!");
 
             return;
         }
         catch (HttpRequestException exc)
         {
             _logger.LogError(
-                $"Checking if '{newBranch}' branch existed in repo '{repoUri}' failed with '{exc.Message}'");
+                $"Checking if '{newBranch}' branch existed in repo '{_repoUri}' failed with '{exc.Message}'");
             throw;
         }
     }
@@ -205,11 +201,9 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     /// <param name="repoUri">Repository URL</param>
     /// <param name="branch">Branch to delete</param>
     /// <returns>Async Task</returns>
-    public async Task DeleteBranchAsync(string repoUri, string branch)
+    public async Task DeleteBranchAsync(string branch)
     {
-        (string owner, string repo) = ParseRepoUri(repoUri);
-
-        await DeleteBranchAsync(owner, repo, branch);
+        await DeleteBranchAsync(_repoOwner, _repoName, branch);
     }
 
     /// <summary>
@@ -217,13 +211,12 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     /// </summary>
     /// <param name="repoUri">Repository to find the branch in</param>
     /// <param name="branch">Branch to find</param>
-    public async Task<bool> DoesBranchExistAsync(string repoUri, string branch)
+    public async Task<bool> DoesBranchExistAsync(string branch)
     {
         branch = GitHelpers.NormalizeBranchName(branch);
-        (string owner, string repo) = ParseRepoUri(repoUri);
         try
         {
-            await GetClient(repoUri).Repository.Branch.Get(owner, repo, branch);
+            await Client.Repository.Branch.Get(_repoOwner, _repoName, branch);
             return true;
         }
         catch (NotFoundException)
@@ -241,26 +234,23 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     /// <returns></returns>
     private async Task DeleteBranchAsync(string owner, string repo, string branch)
     {
-        await GetClient(owner, repo).Git.Reference.Delete(owner, repo, $"heads/{branch}");
+        await Client.Git.Reference.Delete(owner, repo, $"heads/{branch}");
     }
 
     /// <summary>
     ///     Search pull requests matching the specified criteria
     /// </summary>
-    /// <param name="repoUri">URI of repo containing the pull request</param>
     /// <param name="pullRequestBranch">Source branch for PR</param>
     /// <param name="status">Current PR status</param>
     /// <param name="keyword">Keyword</param>
     /// <param name="author">Author</param>
     /// <returns>List of pull requests matching the specified criteria</returns>
     public async Task<IEnumerable<int>> SearchPullRequestsAsync(
-        string repoUri,
         string pullRequestBranch,
         PrStatus status,
         string? keyword = null,
         string? author = null)
     {
-        (string owner, string repo) = ParseRepoUri(repoUri);
         var query = new StringBuilder();
 
         if (!string.IsNullOrEmpty(keyword))
@@ -269,7 +259,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             query.Append('+');
         }
 
-        query.Append($"repo:{owner}/{repo}+head:{pullRequestBranch}+type:pr+is:{status.ToString().ToLower()}");
+        query.Append($"repo:{_repoOwner}/{_repoName}+head:{pullRequestBranch}+type:pr+is:{status.ToString().ToLower()}");
 
         if (!string.IsNullOrEmpty(author))
         {
@@ -279,7 +269,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
         JObject responseContent;
         using (HttpResponseMessage response = await ExecuteRemoteGitCommandAsync(
                    HttpMethod.Get,
-                   $"https://github.com/{owner}/{repo}",
+                   _repoUri,
                    $"search/issues?q={query}",
                    _logger))
         {
@@ -305,8 +295,8 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
         JObject responseContent;
         using (HttpResponseMessage response = await ExecuteRemoteGitCommandAsync(
             HttpMethod.Get,
-            $"https://github.com/{owner}/{repo}",
-            $"repos/{owner}/{repo}/pulls/{id}",
+            _repoUri,
+            $"repos/{_repoOwner}/{_repoName}/pulls/{id}",
             _logger))
         {
             responseContent = JObject.Parse(await response.Content.ReadAsStringAsync());
@@ -344,7 +334,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     public async Task<PullRequest> GetPullRequestAsync(string pullRequestUrl)
     {
         (string owner, string repo, int id) = ParsePullRequestUri(pullRequestUrl);
-        Octokit.PullRequest pr = await GetClient(owner, repo).PullRequest.Get(owner, repo, id);
+        Octokit.PullRequest pr = await Client.PullRequest.Get(owner, repo, id);
         return new PullRequest
         {
             Title = pr.Title,
@@ -360,15 +350,13 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     /// <param name="repoUri">Repo to create the pull request for.</param>
     /// <param name="pullRequest">Pull request data</param>
     /// <returns></returns>
-    public async Task<string> CreatePullRequestAsync(string repoUri, PullRequest pullRequest)
+    public async Task<string> CreatePullRequestAsync(PullRequest pullRequest)
     {
-        (string owner, string repo) = ParseRepoUri(repoUri);
-
         var pr = new NewPullRequest(pullRequest.Title, pullRequest.HeadBranch, pullRequest.BaseBranch)
         {
             Body = pullRequest.Description
         };
-        Octokit.PullRequest createdPullRequest = await GetClient(repoUri).PullRequest.Create(owner, repo, pr);
+        Octokit.PullRequest createdPullRequest = await Client.PullRequest.Create(_repoOwner, _repoName, pr);
 
         return createdPullRequest.Url;
     }
@@ -383,7 +371,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     {
         (string owner, string repo, int id) = ParsePullRequestUri(pullRequestUri);
 
-        await GetClient(owner, repo).PullRequest.Update(
+        await Client.PullRequest.Update(
             owner,
             repo,
             id,
@@ -403,7 +391,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     {
         (string owner, string repo, int id) = ParsePullRequestUri(pullRequestUrl);
 
-        IReadOnlyList<PullRequestCommit> pullRequestCommits = await GetClient(owner, repo).PullRequest.Commits(owner, repo, id);
+        IReadOnlyList<PullRequestCommit> pullRequestCommits = await Client.PullRequest.Commits(owner, repo, id);
 
         IList<Commit> commits = new List<Commit>(pullRequestCommits.Count);
         foreach (var commit in pullRequestCommits)
@@ -425,8 +413,8 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     public async Task MergeDependencyPullRequestAsync(string pullRequestUrl, MergePullRequestParameters parameters, string mergeCommitMessage)
     {
         (string owner, string repo, int id) = ParsePullRequestUri(pullRequestUrl);
-        Octokit.PullRequest pr = await GetClient(owner, repo).PullRequest.Get(owner, repo, id);
-            
+        Octokit.PullRequest pr = await Client.PullRequest.Get(owner, repo, id);
+
         var mergePullRequest = new MergePullRequest
         {
             CommitMessage = mergeCommitMessage,
@@ -434,11 +422,11 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             MergeMethod = parameters.SquashMerge ? PullRequestMergeMethod.Squash : PullRequestMergeMethod.Merge
         };
 
-        await GetClient(owner, repo).PullRequest.Merge(owner, repo, id, mergePullRequest);
+        await Client.PullRequest.Merge(owner, repo, id, mergePullRequest);
 
         if (parameters.DeleteSourceBranch)
         {
-            await GetClient(owner, repo).Git.Reference.Delete(owner, repo, $"heads/{pr.Head.Ref}");
+            await Client.Git.Reference.Delete(owner, repo, $"heads/{pr.Head.Ref}");
         }
     }
 
@@ -451,14 +439,14 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     public async Task CreateOrUpdatePullRequestCommentAsync(string pullRequestUrl, string message)
     {
         (string owner, string repo, int id) = ParsePullRequestUri(pullRequestUrl);
-        IssueComment lastComment = (await GetClient(owner, repo).Issue.Comment.GetAllForIssue(owner, repo, id))[^1];
+        IssueComment lastComment = (await Client.Issue.Comment.GetAllForIssue(owner, repo, id))[^1];
         if (lastComment != null && lastComment.Body.EndsWith(CommentMarker))
         {
-            await GetClient(owner, repo).Issue.Comment.Update(owner, repo, lastComment.Id, message + CommentMarker);
+            await Client.Issue.Comment.Update(owner, repo, lastComment.Id, message + CommentMarker);
         }
         else
         {
-            await GetClient(owner, repo).Issue.Comment.Create(owner, repo, id, message + CommentMarker);
+            await Client.Issue.Comment.Create(owner, repo, id, message + CommentMarker);
         }
     }
 
@@ -475,13 +463,13 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     public async Task CreateOrUpdatePullRequestMergeStatusInfoAsync(string pullRequestUrl, IReadOnlyList<MergePolicyEvaluationResult> evaluations)
     {
         (string owner, string repo, int id) = ParsePullRequestUri(pullRequestUrl);
-        var client = GetClient(owner, repo);
+        var client = Client;
         // Get the sha of the latest commit for the current PR
         string prSha = (await client.PullRequest.Get(owner, repo, id))?.Head?.Sha
             ?? throw new InvalidOperationException("We cannot find the sha of the pull request");
 
         // Get a list of all the merge policies checks runs for the current PR
-        List<CheckRun> existingChecksRuns = 
+        List<CheckRun> existingChecksRuns =
             (await client.Check.Run.GetAllForReference(owner, repo, prSha))
             .CheckRuns.Where(e => e.ExternalId.StartsWith(MergePolicyConstants.MaestroMergePolicyCheckRunPrefix)).ToList();
 
@@ -494,7 +482,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             await client.Check.Run.Create(owner, repo, CheckRunForAdd(newCheckRunValidation, prSha));
         }
         foreach (var updatedCheckRun in toBeUpdated)
-        {                
+        {
             MergePolicyEvaluationResult eval = evaluations.Last(e => updatedCheckRun.ExternalId == CheckRunId(e, prSha));
             CheckRunUpdate newCheckRunUpdateValidation = CheckRunForUpdate(eval);
             await client.Check.Run.Update(owner, repo, updatedCheckRun.Id, newCheckRunUpdateValidation);
@@ -617,30 +605,21 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     /// <param name="commit">Commit to get files at</param>
     /// <param name="path">Path to retrieve files from</param>
     /// <returns>Set of files under <paramref name="path"/> at <paramref name="commit"/></returns>
-    public async Task<List<GitFile>> GetFilesAtCommitAsync(string repoUri, string commit, string path)
+    public async Task<List<GitFile>> GetFilesAtCommitAsync(string commit, string path)
     {
         path = path.Replace('\\', '/');
         path = path.TrimStart('/').TrimEnd('/');
 
-        (string owner, string repo) = ParseRepoUri(repoUri);
+        TreeResponse pathTree = await GetTreeForPathAsync(_repoOwner, _repoName, commit, path);
 
-        if (string.IsNullOrEmpty(owner) || string.IsNullOrEmpty(repo))
-        {
-            _logger.LogInformation($"'owner' or 'repository' couldn't be inferred from '{repoUri}'. " +
-                                   $"Not getting files from 'eng/common...'");
-            return [];
-        }
-
-        TreeResponse pathTree = await GetTreeForPathAsync(owner, repo, commit, path);
-
-        TreeResponse recursiveTree = await GetRecursiveTreeAsync(owner, repo, pathTree.Sha);
+        TreeResponse recursiveTree = await GetRecursiveTreeAsync(_repoOwner, _repoName, pathTree.Sha);
 
         GitFile?[] files = await Task.WhenAll(
             recursiveTree.Tree.Where(treeItem => treeItem.Type == TreeType.Blob)
                 .Select(
                     async treeItem =>
                     {
-                        return await GetGitTreeItem(path, treeItem, owner, repo);
+                        return await GetGitTreeItem(path, treeItem, _repoOwner, _repoName);
                     }));
         return [.. files.Where(f => f != null)];
     }
@@ -706,10 +685,10 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
                 {
                     try
                     {
-                        blob = await GetClient(owner, repo).Git.Blob.Get(owner, repo, treeItem.Sha);
+                        blob = await Client.Git.Blob.Get(owner, repo, treeItem.Sha);
                         break;
                     }
-                    catch (Exception e) when ((e is ForbiddenException || e is AbuseException ) && attempts < maxAttempts)
+                    catch (Exception e) when ((e is ForbiddenException || e is AbuseException) && attempts < maxAttempts)
                     {
                         // AbuseException exposes a retry-after field which lets us know how long we should wait. ForbiddenException does not, so use 60 seconds
                         var retryAfterSeconds = 60;
@@ -725,7 +704,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
                 }
 
                 return blob;
-                                    
+
             },
             ex => _logger.LogError(ex, $"Failed to get blob at sha {treeItem.Sha}"),
             ex => ex is ApiException apiex && apiex.StatusCode >= HttpStatusCode.InternalServerError);
@@ -817,10 +796,9 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     /// <param name="filePath">Path to file</param>
     /// <param name="branch">Branch</param>
     /// <returns>Sha of file or null if the file does not exist.</returns>
-    public async Task<string?> CheckIfFileExistsAsync(string repoUri, string filePath, string branch)
+    public async Task<string?> CheckIfFileExistsAsync(string filePath, string branch)
     {
         string commit;
-        (string owner, string repo) = ParseRepoUri(repoUri);
         HttpResponseMessage response;
 
         try
@@ -828,8 +806,8 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             JObject content;
             using (response = await ExecuteRemoteGitCommandAsync(
                        HttpMethod.Get,
-                       $"https://github.com/{owner}/{repo}",
-                       $"repos/{owner}/{repo}/contents/{filePath}?ref={branch}",
+                       _repoUri,
+                       $"repos/{_repoOwner}/{_repoName}/contents/{filePath}?ref={branch}",
                        _logger))
             {
                 content = JObject.Parse(await response.Content.ReadAsStringAsync());
@@ -838,22 +816,10 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
 
             return commit;
         }
-        catch (HttpRequestException exc) when (exc.Message.Contains(((int) HttpStatusCode.NotFound).ToString()))
+        catch (HttpRequestException exc) when (exc.Message.Contains(((int)HttpStatusCode.NotFound).ToString()))
         {
             return null;
         }
-    }
-
-    /// <summary>
-    ///     Get the latest commit in a repo on the specific branch 
-    /// </summary>
-    /// <param name="repoUri">Repository uri</param>
-    /// <param name="branch">Branch to retrieve the latest sha for</param>
-    /// <returns>Latest sha.  Nulls if no commits were found.</returns>
-    public Task<string?> GetLastCommitShaAsync(string repoUri, string branch)
-    {
-        (string owner, string repo) = ParseRepoUri(repoUri);
-        return GetLastCommitShaAsync(owner, repo, branch);
     }
 
     /// <summary>
@@ -862,23 +828,10 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     /// <param name="repoUri">Repository URI</param>
     /// <param name="sha">Sha of the commit</param>
     /// <returns>Return the commit matching the specified sha. Null if no commit were found.</returns>
-    public Task<Commit?> GetCommitAsync(string repoUri, string sha)
+    public async Task<Commit?> GetCommitAsync(string sha)
     {
-        (string owner, string repo) = ParseRepoUri(repoUri);
-        return GetCommitAsync(owner, repo, sha);
-    }
-
-    /// <summary>
-    ///     Get a commit in a repo 
-    /// </summary>
-    /// <param name="owner">Owner of repo</param>
-    /// <param name="repo">Repository name</param>
-    /// <param name="sha">Sha of the commit</param>
-    /// <returns>Return the commit matching the specified sha. Null if no commit were found.</returns>
-    private async Task<Commit?> GetCommitAsync(string owner, string repo, string sha)
-    {
-        Repository repository = await GetClient(owner, repo).Repository.Get(owner, repo);
-        Octokit.GitHubCommit commit = await GetClient(owner, repo).Repository.Commit.Get(repository.Id, sha);
+        Repository repository = await Client.Repository.Get(_repoOwner, _repoName);
+        Octokit.GitHubCommit commit = await Client.Repository.Commit.Get(repository.Id, sha);
         if (commit == null)
         {
             return null;
@@ -889,20 +842,19 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     /// <summary>
     ///     Get the latest commit in a repo on the specific branch 
     /// </summary>
-    /// <param name="owner">Owner of repo</param>
-    /// <param name="repo">Repository name</param>
+    /// <param name="repoUri">Repository uri</param>
     /// <param name="branch">Branch to retrieve the latest sha for</param>
-    /// <returns>Latest sha.  Null if no commits were found.</returns>
-    private async Task<string?> GetLastCommitShaAsync(string owner, string repo, string branch)
+    /// <returns>Latest sha.  Nulls if no commits were found.</returns>
+    public async Task<string?> GetLastCommitShaAsync(string branch)
     {
         try
         {
             JObject content;
             using (HttpResponseMessage response = await ExecuteRemoteGitCommandAsync(
-                       HttpMethod.Get,
-                       $"https://github.com/{owner}/{repo}",
-                       $"repos/{owner}/{repo}/commits/{branch}",
-                       _logger))
+                HttpMethod.Get,
+                _repoUri,
+                $"repos/{_repoOwner}/{_repoName}/commits/{branch}",
+                _logger))
             {
                 content = JObject.Parse(await response.Content.ReadAsStringAsync());
             }
@@ -925,11 +877,11 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     {
         (string owner, string repo, int id) = ParsePullRequestUri(pullRequestUrl);
 
-        var commits = await GetClient(owner, repo).Repository.PullRequest.Commits(owner, repo, id);
+        var commits = await Client.Repository.PullRequest.Commits(owner, repo, id);
         var lastCommitSha = commits[commits.Count - 1].Sha;
 
-        return (await GetChecksFromStatusApiAsync(owner, repo, lastCommitSha))
-            .Concat(await GetChecksFromChecksApiAsync(owner, repo, lastCommitSha))
+        return (await GetChecksFromStatusApiAsync(lastCommitSha))
+            .Concat(await GetChecksFromChecksApiAsync(lastCommitSha))
             .ToList();
     }
 
@@ -945,7 +897,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     {
         (string owner, string repo, int id) = ParsePullRequestUri(pullRequestUrl);
 
-        var reviews = await GetClient(owner, repo).Repository.PullRequest.Review.GetAll(owner, repo, id);
+        var reviews = await Client.Repository.PullRequest.Review.GetAll(owner, repo, id);
 
         // Filter out comments because they could come after Approved/ChangedRequested, and they don't change the decision.
         reviews = reviews.Where(r => r.State != PullRequestReviewState.Commented).ToImmutableList();
@@ -954,8 +906,8 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
         var newestActionableReviews = reviews.GroupBy(r => r.User.Login)
             .ToDictionary(g => g.Key,
                 g => (from r in reviews
-                        where r.User.Login == g.Key
-                        select r)
+                      where r.User.Login == g.Key
+                      select r)
                     .OrderByDescending(r => r.SubmittedAt)
                     .First())
             .Values;
@@ -964,25 +916,22 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             new Review(TranslateReviewState(review.State.Value), pullRequestUrl)).ToList();
     }
 
-    private static ReviewState TranslateReviewState(PullRequestReviewState state)
+    private static ReviewState TranslateReviewState(PullRequestReviewState state) => state switch
     {
-        return state switch
-        {
-            PullRequestReviewState.Approved => ReviewState.Approved,
-            PullRequestReviewState.ChangesRequested => ReviewState.ChangesRequested,
-            PullRequestReviewState.Commented => ReviewState.Commented,
-            // A PR comment could be dismissed by a new push, so this does not count as a rejection.
-            // Change to a comment
-            PullRequestReviewState.Dismissed => ReviewState.Commented,
-            PullRequestReviewState.Pending => ReviewState.Pending,
-            _ => throw new NotImplementedException($"Unexpected pull request review state {state}"),
-        };
-    }
+        PullRequestReviewState.Approved => ReviewState.Approved,
+        PullRequestReviewState.ChangesRequested => ReviewState.ChangesRequested,
+        PullRequestReviewState.Commented => ReviewState.Commented,
+        // A PR comment could be dismissed by a new push, so this does not count as a rejection.
+        // Change to a comment
+        PullRequestReviewState.Dismissed => ReviewState.Commented,
+        PullRequestReviewState.Pending => ReviewState.Pending,
+        _ => throw new NotImplementedException($"Unexpected pull request review state {state}"),
+    };
 
-    private async Task<IList<Check>> GetChecksFromStatusApiAsync(string owner, string repo, string @ref)
+    private async Task<IList<Check>> GetChecksFromStatusApiAsync(string @ref)
     {
-        var status = await GetClient(owner, repo).Repository.Status.GetCombined(owner, repo, @ref);
-            
+        var status = await Client.Repository.Status.GetCombined(_repoOwner, _repoName, @ref);
+
         return status.Statuses.Select(
                 s =>
                 {
@@ -1001,9 +950,9 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             .ToList();
     }
 
-    private async Task<IList<Check>> GetChecksFromChecksApiAsync(string owner, string repo, string @ref)
+    private async Task<IList<Check>> GetChecksFromChecksApiAsync(string @ref)
     {
-        var checkRuns = await GetClient(owner, repo).Check.Run.GetAllForReference(owner, repo, @ref);
+        var checkRuns = await Client.Check.Run.GetAllForReference(_repoOwner, _repoName, @ref);
         return checkRuns.CheckRuns.Select(
                 run =>
                 {
@@ -1026,18 +975,6 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             .ToList();
     }
 
-    public virtual IGitHubClient GetClient(string repoUri)
-    {
-        _lazyClient ??= CreateGitHubClient(repoUri);
-        return _lazyClient;
-    }
-
-    public virtual IGitHubClient GetClient(string owner, string repo)
-    {
-        _lazyClient ??= CreateGitHubClient($"https://github.com/{owner}/{repo}");
-        return _lazyClient;
-    }
-
     private Octokit.GitHubClient CreateGitHubClient(string repoUri)
     {
         var token = _tokenProvider.GetTokenForRepository(repoUri);
@@ -1056,7 +993,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
 
     private async Task<TreeResponse> GetRecursiveTreeAsync(string owner, string repo, string treeSha)
     {
-        TreeResponse tree = await GetClient(owner, repo).Git.Tree.GetRecursive(owner, repo, treeSha);
+        TreeResponse tree = await Client.Git.Tree.GetRecursive(owner, repo, treeSha);
         if (tree.Truncated)
         {
             throw new NotSupportedException(
@@ -1070,13 +1007,13 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     {
         var pathSegments = new Queue<string>(path.Split('/', '\\'));
         var currentPath = new List<string>();
-        Octokit.Commit commit = await GetClient(owner, repo).Git.Commit.Get(owner, repo, commitSha);
+        Octokit.Commit commit = await Client.Git.Commit.Get(owner, repo, commitSha);
 
         string treeSha = commit.Tree.Sha;
 
         while (true)
         {
-            TreeResponse tree = await GetClient(owner, repo).Git.Tree.Get(owner, repo, treeSha);
+            TreeResponse tree = await Client.Git.Tree.Get(owner, repo, treeSha);
             if (tree.Truncated)
             {
                 throw new NotSupportedException(
@@ -1101,7 +1038,6 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     }
 
     private async Task GetCommitMapForPathAsync(
-        string repoUri,
         string branch,
         string assetsProducedInCommit,
         List<GitFile> files,
@@ -1114,15 +1050,14 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
         }
 
         _logger.LogInformation(
-            $"Getting the contents of file/files in '{path}' of repo '{repoUri}' at commit '{assetsProducedInCommit}'");
+            $"Getting the contents of file/files in '{path}' of repo '{_repoUri}' at commit '{assetsProducedInCommit}'");
 
-        (string owner, string repo) = ParseRepoUri(repoUri);
         List<GitHubContent>? contents;
 
         using (HttpResponseMessage response = await ExecuteRemoteGitCommandAsync(
                    HttpMethod.Get,
-                   $"https://github.com/{owner}/{repo}",
-                   $"repos/{owner}/{repo}/contents/{path}?ref={assetsProducedInCommit}",
+                   _repoUri,
+                   $"repos/{_repoOwner}/{_repoName}/contents/{path}?ref={assetsProducedInCommit}",
                    _logger))
         {
             contents = JsonConvert.DeserializeObject<List<GitHubContent>>(await response.Content.ReadAsStringAsync());
@@ -1134,7 +1069,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             {
                 if (!DependencyFileManager.DependencyFiles.Contains(content.Path))
                 {
-                    string fileContent = await GetFileContentsAsync(owner, repo, content.Path);
+                    string fileContent = await GetFileContentsAsync(content.Path, branch);
                     var gitCommit = new GitFile(content.Path, fileContent);
                     files.Add(gitCommit);
                 }
@@ -1142,7 +1077,6 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             else
             {
                 await GetCommitMapForPathAsync(
-                    repoUri,
                     branch,
                     assetsProducedInCommit,
                     files,
@@ -1152,7 +1086,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
         }
 
         _logger.LogInformation(
-            $"Getting the contents of file/files in '{path}' of repo '{repoUri}' at commit '{assetsProducedInCommit}' succeeded!");
+            $"Getting the contents of file/files in '{path}' of repo '{_repoUri}' at commit '{assetsProducedInCommit}' succeeded!");
     }
 
     /// <summary>
@@ -1193,18 +1127,16 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     ///     Commit or update a set of files to a repo
     /// </summary>
     /// <param name="filesToCommit">Files to comit</param>
-    /// <param name="repoUri">Remote repository URI</param>
     /// <param name="branch">Branch to push to</param>
     /// <param name="commitMessage">Commit message</param>
-    public async Task CommitFilesAsync(List<GitFile> filesToCommit, string repoUri, string branch, string commitMessage)
+    public async Task CommitFilesAsync(List<GitFile> filesToCommit, string branch, string commitMessage)
     {
         await CommitFilesAsync(
             filesToCommit,
-            repoUri,
             branch,
             commitMessage,
             _logger,
-            await _tokenProvider.GetTokenForRepositoryAsync(repoUri),
+            await _tokenProvider.GetTokenForRepositoryAsync(_repoUri),
             Constants.DarcBotName,
             Constants.DarcBotEmail);
     }
@@ -1216,19 +1148,18 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     /// <param name="baseVersion">Base version</param>
     /// <param name="targetVersion">Target version</param>
     /// <returns>Diff information</returns>
-    public async Task<GitDiff> GitDiffAsync(string repoUri, string baseVersion, string targetVersion)
+    public async Task<GitDiff> GitDiffAsync(string baseVersion, string targetVersion)
     {
         _logger.LogInformation(
-            $"Diffing '{baseVersion}'->'{targetVersion}' in {repoUri}");
-        (string owner, string repo) = ParseRepoUri(repoUri);
+            $"Diffing '{baseVersion}'->'{targetVersion}' in {_repoUri}");
 
         try
         {
             JObject content;
             using (HttpResponseMessage response = await ExecuteRemoteGitCommandAsync(
                        HttpMethod.Get,
-                       $"https://github.com/{owner}/{repo}",
-                       $"repos/{owner}/{repo}/compare/{baseVersion}...{targetVersion}",
+                       _repoUri,
+                       $"repos/{_repoOwner}/{_repoName}/compare/{baseVersion}...{targetVersion}",
                        _logger))
             {
                 content = JObject.Parse(await response.Content.ReadAsStringAsync());
@@ -1243,7 +1174,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
                 Valid = true
             };
         }
-        catch (HttpRequestException reqEx) when (reqEx.Message.Contains(((int) HttpStatusCode.NotFound).ToString()))
+        catch (HttpRequestException reqEx) when (reqEx.Message.Contains(((int)HttpStatusCode.NotFound).ToString()))
         {
             return GitDiff.UnknownDiff();
         }
@@ -1252,18 +1183,15 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     /// <summary>
     /// Checks that a repository exists
     /// </summary>
-    /// <param name="repoUri">Repository uri</param>
     /// <returns>True if the repository exists, false otherwise.</returns>
-    public async Task<bool> RepoExistsAsync(string repoUri)
+    public async Task<bool> RepoExistsAsync()
     {
-        (string owner, string repo) = ParseRepoUri(repoUri);
-
         try
         {
             using (await ExecuteRemoteGitCommandAsync(
                        HttpMethod.Get,
-                       $"https://github.com/{owner}/{repo}",
-                       $"repos/{owner}/{repo}",
+                       _repoUri,
+                       $"repos/{_repoOwner}/{_repoName}",
                        _logger,
                        logFailure: false)) { }
             return true;
