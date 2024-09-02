@@ -157,15 +157,7 @@ public abstract class CommandLineOptions : ICommandLineOptions
             };
         });
         services.TryAddSingleton<IAzureDevOpsTokenProvider, AzureDevOpsTokenProvider>();
-        services.TryAddSingleton(s =>
-            new AzureDevOpsClient(
-                s.GetRequiredService<IAzureDevOpsTokenProvider>(),
-                s.GetRequiredService<IProcessManager>(),
-                s.GetRequiredService<ILogger>())
-        );
-        services.TryAddSingleton<IAzureDevOpsClient>(s =>
-            s.GetRequiredService<AzureDevOpsClient>()
-        );
+        services.TryAddTransient<IAzureDevOpsClientFactory, AzureDevOpsClientFactory>();
         services.TryAddSingleton<IRemoteTokenProvider>(_ => new RemoteTokenProvider(AzureDevOpsPat, GitHubPat));
         services.TryAddSingleton<ICommandLineOptions>(_ => this);
 

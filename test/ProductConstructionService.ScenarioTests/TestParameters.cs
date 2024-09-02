@@ -81,15 +81,14 @@ public class TestParameters : IDisposable
             new Octokit.GitHubClient(
                 new Octokit.ProductHeaderValue(assembly.GetName().Name, assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion),
                 new InMemoryCredentialStore(new Octokit.Credentials(githubToken)));
-        var azDoClient =
-            new AzureDevOpsClient(
+        var azDoClientFactory =
+            new AzureDevOpsClientFactory(
                 tokenProvider,
                 new ProcessManager(new NUnitLogger(), git),
-                new NUnitLogger(),
-                testDirSharedWrapper.TryTake()!.Directory);
+                new NUnitLogger());
 
         return new TestParameters(
-            darcExe, git, pcsBaseUri, pcsToken, githubToken, pcsApi, githubApi, azDoClient, testDir, azdoToken, isCI);
+            darcExe, git, pcsBaseUri, pcsToken, githubToken, pcsApi, githubApi, azDoClientFactory, testDir, azdoToken, isCI);
     }
 
     private static async Task InstallDarc(IProductConstructionServiceApi pcsApi, Shareable<TemporaryDirectory> toolPath)
@@ -122,7 +121,7 @@ public class TestParameters : IDisposable
         string gitHubToken,
         IProductConstructionServiceApi pcsApi,
         Octokit.GitHubClient gitHubApi,
-        AzureDevOpsClient azdoClient,
+        AzureDevOpsClientFactory azdoClientFactory,
         TemporaryDirectory dir,
         string azdoToken,
         bool isCI)
@@ -135,7 +134,7 @@ public class TestParameters : IDisposable
         GitHubToken = gitHubToken;
         PcsApi = pcsApi;
         GitHubApi = gitHubApi;
-        AzDoClient = azdoClient;
+        AzDoClientFactory = azdoClientFactory;
         AzDoToken = azdoToken;
         IsCI = isCI;
     }
@@ -158,7 +157,7 @@ public class TestParameters : IDisposable
 
     public Octokit.GitHubClient GitHubApi { get; }
 
-    public AzureDevOpsClient AzDoClient { get; }
+    public AzureDevOpsClientFactory AzDoClientFactory { get; }
 
     public int AzureDevOpsBuildDefinitionId { get; } = 6;
 

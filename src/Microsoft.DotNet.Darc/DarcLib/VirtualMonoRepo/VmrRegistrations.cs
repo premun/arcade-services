@@ -47,7 +47,7 @@ public static class VmrRegistrations
         services.TryAddTransient<ILocalGitRepoFactory, LocalGitRepoFactory>();
         services.TryAddTransient<ILocalGitClient, LocalGitClient>();
         services.TryAddTransient<ILocalLibGit2Client, LocalLibGit2Client>();
-        services.TryAddTransient<IAzureDevOpsClient, AzureDevOpsClient>();
+        services.TryAddTransient<IAzureDevOpsClientFactory, AzureDevOpsClientFactory>();
         services.TryAddTransient<ISourceMappingParser, SourceMappingParser>();
         services.TryAddTransient<IVersionDetailsParser, VersionDetailsParser>();
         services.TryAddTransient<IVmrPatchHandler, VmrPatchHandler>();

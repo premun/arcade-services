@@ -3,7 +3,6 @@
 
 using System;
 using System.Threading.Tasks;
-using Maestro.Common.AzureDevOpsTokens;
 using Maestro.Data;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.DarcLib.Helpers;
@@ -21,12 +20,12 @@ public class DarcRemoteFactory : IRemoteFactory
     private readonly BuildAssetRegistryContext _context;
     private readonly DarcRemoteMemoryCache _cache;
     private readonly IGitHubTokenProvider _gitHubTokenProvider;
-    private readonly IAzureDevOpsTokenProvider _azdoTokenProvider;
+    private readonly IAzureDevOpsClientFactory _azdoClientFactory;
 
     public DarcRemoteFactory(
         BuildAssetRegistryContext context,
         IGitHubTokenProvider gitHubTokenProvider,
-        IAzureDevOpsTokenProvider azdoTokenProvider,
+        IAzureDevOpsClientFactory azdoClientFactory,
         IVersionDetailsParser versionDetailsParser,
         DarcRemoteMemoryCache memoryCache,
         OperationManager operations,
@@ -37,7 +36,7 @@ public class DarcRemoteFactory : IRemoteFactory
         _versionDetailsParser = versionDetailsParser;
         _context = context;
         _gitHubTokenProvider = gitHubTokenProvider;
-        _azdoTokenProvider = azdoTokenProvider;
+        _azdoClientFactory = azdoClientFactory;
         _cache = memoryCache;
     }
 
@@ -85,7 +84,7 @@ public class DarcRemoteFactory : IRemoteFactory
                     logger,
                     _cache.Cache),
 
-            GitRepoType.AzureDevOps => new AzureDevOpsClient(repoUrl, _azdoTokenProvider, _processManager, logger),
+            GitRepoType.AzureDevOps => _azdoClientFactory.GetAzureDevOpsClient(repoUrl),
 
             _ => throw new NotImplementedException($"Unknown repo url type {normalizedUrl}"),
         };
