@@ -50,18 +50,25 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
     // Azure DevOps uses this id when creating a new branch as well as when deleting a branch
     private static readonly string BaseObjectId = "0000000000000000000000000000000000000000";
 
+    private readonly string _repoUri;
+    private readonly string _accountName;
+    private readonly string _projectName;
+    private readonly string _repoName;
+
     private readonly IAzureDevOpsTokenProvider _tokenProvider;
     private readonly ILogger _logger;
     private readonly JsonSerializerSettings _serializerSettings;
 
-    public AzureDevOpsClient(IAzureDevOpsTokenProvider tokenProvider, IProcessManager processManager, ILogger logger)
-        : this(tokenProvider, processManager, logger, null)
+    public AzureDevOpsClient(string repoUri, IAzureDevOpsTokenProvider tokenProvider, IProcessManager processManager, ILogger logger)
+        : this(repoUri, tokenProvider, processManager, logger, null)
     {
     }
 
-    public AzureDevOpsClient(IAzureDevOpsTokenProvider tokenProvider, IProcessManager processManager, ILogger logger, string temporaryRepositoryPath)
-        : base(tokenProvider, processManager, temporaryRepositoryPath, null, logger)
+    public AzureDevOpsClient(string repoUri, IAzureDevOpsTokenProvider tokenProvider, IProcessManager processManager, ILogger logger, string temporaryRepositoryPath)
+        : base(repoUri, tokenProvider, processManager, temporaryRepositoryPath, null, logger)
     {
+        _repoUri = repoUri;
+        (_accountName, _projectName, _repoName) = ParseRepoUri(repoUri);
         _tokenProvider = tokenProvider;
         _logger = logger;
         _serializerSettings = new JsonSerializerSettings
@@ -73,39 +80,20 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
 
     public bool AllowRetries { get; set; } = true;
 
-    /// <summary>
-    /// Retrieve the contents of a text file in a repo on a specific branch
-    /// </summary>
-    /// <param name="filePath">Path to file within the repo</param>
-    /// <param name="repoUri">Repository url</param>
-    /// <param name="branch">Branch or commit</param>
-    /// <returns>Content of file</returns>
-    public Task<string> GetFileContentsAsync(string filePath, string repoUri, string branch)
-    {
-        (string accountName, string projectName, string repoName) = ParseRepoUri(repoUri);
-
-        return GetFileContentsAsync(accountName, projectName, repoName, filePath, branch);
-    }
-
     private static readonly List<string> VersionTypes = ["branch", "commit", "tag"];
+
     /// <summary>
     ///     Retrieve the contents of a text file in a repo on a specific branch
     /// </summary>
-    /// <param name="accountName">Azure DevOps account</param>
-    /// <param name="projectName">Azure DevOps project</param>
-    /// <param name="repoName">Azure DevOps repo</param>
     /// <param name="filePath">Path to file</param>
     /// <param name="branchOrCommit">Branch</param>
     /// <returns>Contents of file as string</returns>
-    private async Task<string> GetFileContentsAsync(
-        string accountName,
-        string projectName,
-        string repoName,
+    public async Task<string> GetFileContentsAsync(
         string filePath,
         string branchOrCommit)
     {
         _logger.LogInformation(
-            $"Getting the contents of file '{filePath}' from repo '{accountName}/{projectName}/{repoName}' in branch/commit '{branchOrCommit}'...");
+            $"Getting the contents of file '{filePath}' from repo '{_accountName}/{_projectName}/{_repoName}' in branch/commit '{branchOrCommit}'...");
 
         // The AzDO REST API currently does not transparently handle commits vs. branches vs. tags.
         // You really need to know whether you're talking about a commit or branch or tag
@@ -118,9 +106,9 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
             {
                 JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
                     HttpMethod.Get,
-                    accountName,
-                    projectName,
-                    $"_apis/git/repositories/{repoName}/items?path={filePath}&versionType={versionType}&version={branchOrCommit}&includeContent=true",
+                    _accountName,
+                    _projectName,
+                    $"_apis/git/repositories/{_repoName}/items?path={filePath}&versionType={versionType}&version={branchOrCommit}&includeContent=true",
                     _logger,
                     // Don't log the failure so users don't get confused by 404 messages popping up in expected circumstances.
                     logFailure: false);
@@ -133,7 +121,7 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
             }
         }
 
-        throw new DependencyFileNotFoundException(filePath, $"{repoName}", branchOrCommit, lastException);
+        throw new DependencyFileNotFoundException(filePath, $"{_repoName}", branchOrCommit, lastException);
     }
 
     /// <summary>
@@ -142,18 +130,16 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
     /// <param name="repoUri">Repo to create a branch in</param>
     /// <param name="newBranch">New branch name</param>
     /// <param name="baseBranch">Base of new branch</param>
-    public async Task CreateBranchAsync(string repoUri, string newBranch, string baseBranch)
+    public async Task CreateBranchAsync(string newBranch, string baseBranch)
     {
-        (string accountName, string projectName, string repoName) = ParseRepoUri(repoUri);
-
         var azureDevOpsRefs = new List<AzureDevOpsRef>();
-        string latestSha = await GetLastCommitShaAsync(accountName, projectName, repoName, baseBranch);
+        string latestSha = await GetLastCommitShaAsync(baseBranch);
 
         JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Get,
-            accountName,
-            projectName,
-            $"_apis/git/repositories/{repoName}/refs/heads/{newBranch}",
+            _accountName,
+            _projectName,
+            $"_apis/git/repositories/{_repoName}/refs/heads/{newBranch}",
             _logger,
             retryCount: 0);
 
@@ -172,7 +158,7 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
             _logger.LogInformation(
                 $"Branch '{newBranch}' exists, making sure it is in sync with '{baseBranch}'...");
 
-            string oldSha = await GetLastCommitShaAsync(repoName, $"{newBranch}");
+            string oldSha = await GetLastCommitShaAsync(newBranch);
 
             azureDevOpsRef = new AzureDevOpsRef($"refs/heads/{newBranch}", latestSha, oldSha);
             azureDevOpsRefs.Add(azureDevOpsRef);
@@ -182,24 +168,11 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
 
         await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Post,
-            accountName,
-            projectName,
-            $"_apis/git/repositories/{repoName}/refs",
+            _accountName,
+            _projectName,
+            $"_apis/git/repositories/{_repoName}/refs",
             _logger,
             body);
-    }
-
-    /// <summary>
-    /// Deletes a branch in a repository
-    /// </summary>
-    /// <param name="repoUri">Repository Uri</param>
-    /// <param name="branch">Branch to delete</param>
-    /// <returns>Async task</returns>
-    public async Task DeleteBranchAsync(string repoUri, string branch)
-    {
-        (string accountName, string projectName, string repoName) = ParseRepoUri(repoUri);
-
-        await DeleteBranchAsync(accountName, projectName, repoName, branch);
     }
 
     /// <summary>
@@ -207,16 +180,15 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
     /// </summary>
     /// <param name="repoUri">Repository to find the branch in</param>
     /// <param name="branch">Branch to find</param>
-    public async Task<bool> DoesBranchExistAsync(string repoUri, string branch)
+    public async Task<bool> DoesBranchExistAsync(string branch)
     {
         branch = GitHelpers.NormalizeBranchName(branch);
-        (string accountName, string projectName, string repoName) = ParseRepoUri(repoUri);
 
         JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Get,
-            accountName,
-            projectName,
-            $"_apis/git/repositories/{repoName}/refs?filter=heads/{branch}",
+            _accountName,
+            _projectName,
+            $"_apis/git/repositories/{_repoName}/refs?filter=heads/{branch}",
             _logger,
             versionOverride: "7.0");
 
@@ -227,14 +199,11 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
     /// <summary>
     /// Deletes a branch in a repository
     /// </summary>
-    /// <param name="accountName">Azure DevOps Account</param>
-    /// <param name="projectName">Azure DevOps project</param>
-    /// <param name="repoName">Name of the repository</param>
     /// <param name="branch">Brach to delete</param>
     /// <returns>Async Task</returns>
-    private async Task DeleteBranchAsync(string accountName, string projectName, string repoName, string branch)
+    public async Task DeleteBranchAsync(string branch)
     {
-        string latestSha = await GetLastCommitShaAsync(accountName, projectName, repoName, branch);
+        string latestSha = await GetLastCommitShaAsync(branch);
 
         var azureDevOpsRefs = new List<AzureDevOpsRef>();
         var azureDevOpsRef = new AzureDevOpsRef($"refs/heads/{branch}", BaseObjectId, latestSha);
@@ -244,9 +213,9 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
 
         await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Post,
-            accountName,
-            projectName,
-            $"_apis/git/repositories/{repoName}/refs",
+            _accountName,
+            _projectName,
+            $"_apis/git/repositories/{_repoName}/refs",
             _logger,
             body);
     }
@@ -261,13 +230,11 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
     /// <param name="author">Author</param>
     /// <returns>List of pull requests matching the specified criteria</returns>
     public async Task<IEnumerable<int>> SearchPullRequestsAsync(
-        string repoUri,
         string pullRequestBranch,
         PrStatus status,
         string keyword = null,
         string author = null)
     {
-        (string accountName, string projectName, string repoName) = ParseRepoUri(repoUri);
         var query = new StringBuilder();
         var prStatus = status switch
         {
@@ -291,9 +258,9 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
 
         JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Get,
-            accountName,
-            projectName,
-            $"_apis/git/repositories/{repoName}/pullrequests?{query}",
+            _accountName,
+            _projectName,
+            $"_apis/git/repositories/{_repoName}/pullrequests?{query}",
             _logger);
 
         var values = JArray.Parse(content["value"].ToString());
@@ -312,7 +279,7 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
         (string accountName, string projectName, string repoName, int id) = ParsePullRequestUri(pullRequestUrl);
 
         JObject content = await ExecuteAzureDevOpsAPIRequestAsync(HttpMethod.Get,
-            accountName, projectName, $"_apis/git/repositories/{repoName}/pullRequests/{id}", _logger);
+            accountName, projectName, $"_apis/git/repositories/{_repoName}/pullRequests/{id}", _logger);
 
         if (Enum.TryParse(content["status"].ToString(), true, out AzureDevOpsPrStatus status))
         {
@@ -375,11 +342,9 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
     /// <param name="repoUri">Repository URI</param>
     /// <param name="pullRequest">Pull request data</param>
     /// <returns>URL of new pull request</returns>
-    public async Task<string> CreatePullRequestAsync(string repoUri, PullRequest pullRequest)
+    public async Task<string> CreatePullRequestAsync(PullRequest pullRequest)
     {
-        (string accountName, string projectName, string repoName) = ParseRepoUri(repoUri);
-
-        using VssConnection connection = CreateVssConnection(accountName);
+        using VssConnection connection = CreateVssConnection(_accountName);
         using GitHttpClient client = await connection.GetClientAsync<GitHttpClient>();
 
         GitPullRequest createdPr = await client.CreatePullRequestAsync(
@@ -390,8 +355,8 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
                 SourceRefName = RefsHeadsPrefix + pullRequest.HeadBranch,
                 TargetRefName = RefsHeadsPrefix + pullRequest.BaseBranch,
             },
-            projectName,
-            repoName);
+            _projectName,
+            _repoName);
 
         return createdPr.Url;
     }
@@ -570,20 +535,18 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <param name="commit">Commit to get files at</param>
     /// <param name="path">Path to retrieve files from</param>
     /// <returns>Set of files under <paramref name="path"/> at <paramref name="commit"/></returns>
-    public async Task<List<GitFile>> GetFilesAtCommitAsync(string repoUri, string commit, string path)
+    public async Task<List<GitFile>> GetFilesAtCommitAsync(string commit, string path)
     {
         var files = new List<GitFile>();
 
         _logger.LogInformation(
-            $"Getting the contents of file/files in '{path}' of repo '{repoUri}' at commit '{commit}'");
-
-        (string accountName, string projectName, string repoName) = ParseRepoUri(repoUri);
+            $"Getting the contents of file/files in '{path}' of repo '{_repoUri}' at commit '{commit}'");
 
         JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Get,
-            accountName,
-            projectName,
-            $"_apis/git/repositories/{repoName}/items?scopePath={path}&version={commit}&includeContent=true&versionType=commit&recursionLevel=full",
+            _accountName,
+            _projectName,
+            $"_apis/git/repositories/{_repoName}/items?scopePath={path}&version={commit}&includeContent=true&versionType=commit&recursionLevel=full",
             _logger);
         List<AzureDevOpsItem> items = JsonConvert.DeserializeObject<List<AzureDevOpsItem>>(Convert.ToString(content["value"]));
 
@@ -593,7 +556,7 @@ This pull request has not been merged because Maestro++ is waiting on the follow
             {
                 if (!DependencyFileManager.DependencyFiles.Contains(item.Path))
                 {
-                    string fileContent = await GetFileContentsAsync(accountName, projectName, repoName, item.Path, commit);
+                    string fileContent = await GetFileContentsAsync(item.Path, commit);
                     var gitCommit = new GitFile(item.Path.TrimStart('/'), fileContent);
                     files.Add(gitCommit);
                 }
@@ -601,40 +564,25 @@ This pull request has not been merged because Maestro++ is waiting on the follow
         }
 
         _logger.LogInformation(
-            $"Getting the contents of file/files in '{path}' of repo '{repoUri}' at commit '{commit}' succeeded!");
+            $"Getting the contents of file/files in '{path}' of repo '{_repoUri}' at commit '{commit}' succeeded!");
 
         return files;
     }
-
+    
     /// <summary>
     ///     Get the latest commit in a repo on the specific branch 
     /// </summary>
-    /// <param name="repoUri">Repository uri</param>
     /// <param name="branch">Branch to retrieve the latest sha for</param>
     /// <returns>Latest sha. Null if no commits were found.</returns>
-    public Task<string> GetLastCommitShaAsync(string repoUri, string branch)
-    {
-        (string accountName, string projectName, string repoName) = ParseRepoUri(repoUri);
-        return GetLastCommitShaAsync(accountName, projectName, repoName, branch);
-    }
-
-    /// <summary>
-    ///     Get the latest commit in a repo on the specific branch
-    /// </summary>
-    /// <param name="accountName">Azure DevOps account</param>
-    /// <param name="projectName">Azure DevOps project</param>
-    /// <param name="repoName">Azure DevOps repo</param>
-    /// <param name="branch">Branch</param>
-    /// <returns>Latest sha. Throws if there were not commits on <paramref name="branch"/></returns>
-    private async Task<string> GetLastCommitShaAsync(string accountName, string projectName, string repoName, string branch)
+    public async Task<string> GetLastCommitShaAsync(string branch)
     {
         try
         {
             JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
                 HttpMethod.Get,
-                accountName,
-                projectName,
-                $"_apis/git/repositories/{repoName}/commits?branch={branch}",
+                _accountName,
+                _projectName,
+                $"_apis/git/repositories/{_repoName}/commits?branch={branch}",
                 _logger);
             var values = JArray.Parse(content["value"].ToString());
 
@@ -649,31 +597,17 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <summary>
     ///     Get a commit in a repo 
     /// </summary>
-    /// <param name="repoUri">Repository URI</param>
     /// <param name="sha">Sha of the commit</param>
     /// <returns>Return the commit matching the specified sha. Null if no commit were found.</returns>
-    public Task<Commit> GetCommitAsync(string repoUri, string sha)
-    {
-        (string accountName, string projectName, string repoName) = ParseRepoUri(repoUri);
-        return GetCommitAsync(accountName, projectName, repoName, sha);
-    }
-
-    /// <summary>
-    ///     Get a commit in a repo 
-    /// </summary>
-    /// <param name="owner">Owner of repo</param>
-    /// <param name="repo">Repository name</param>
-    /// <param name="sha">Sha of the commit</param>
-    /// <returns>Return the commit matching the specified sha. Null if no commit were found.</returns>
-    private async Task<Commit> GetCommitAsync(string accountName, string projectName, string repoName, string sha)
+    public async Task<Commit> GetCommitAsync(string sha)
     {
         try
         {
             JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
                 HttpMethod.Get,
-                accountName,
-                projectName,
-                $"_apis/git/repositories/{repoName}/commits/{sha}",
+                _accountName,
+                _projectName,
+                $"_apis/git/repositories/{_repoName}/commits/{sha}",
                 _logger,
                 versionOverride: "6.0");
             var values = JObject.Parse(content.ToString());
@@ -689,23 +623,20 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <summary>
     ///     Diff two commits in a repository and return information about them.
     /// </summary>
-    /// <param name="repoUri">Repository uri</param>
     /// <param name="baseCommit">Base version</param>
     /// <param name="targetCommit">Target version</param>
     /// <returns>Diff information</returns>
-    public async Task<GitDiff> GitDiffAsync(string repoUri, string baseCommit, string targetCommit)
+    public async Task<GitDiff> GitDiffAsync(string baseCommit, string targetCommit)
     {
-        _logger.LogInformation(
-            $"Diffing '{baseCommit}'->'{targetCommit}' in {repoUri}");
-        (string accountName, string projectName, string repoName) = ParseRepoUri(repoUri);
+        _logger.LogInformation($"Diffing '{baseCommit}'->'{targetCommit}' in {_repoUri}");
 
         try
         {
             JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
                 HttpMethod.Get,
-                accountName,
-                projectName,
-                $"_apis/git/repositories/{repoName}/diffs/commits?baseVersion={baseCommit}&baseVersionType=commit" +
+                _accountName,
+                _projectName,
+                $"_apis/git/repositories/{_repoName}/diffs/commits?baseVersion={baseCommit}&baseVersionType=commit" +
                 $"&targetVersion={targetCommit}&targetVersionType=commit",
                 _logger);
 
@@ -792,7 +723,7 @@ This pull request has not been merged because Maestro++ is waiting on the follow
 
         var values = JArray.Parse(content["value"].ToString());
 
-        IList<Review> reviews = new List<Review>();
+        IList<Review> reviews = [];
         foreach (JToken review in values)
         {
             // Azure DevOps uses an integral "vote" value to identify review state
@@ -1003,14 +934,13 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <param name="branch">Branch to push to</param>
     /// <param name="commitMessage">Commit message</param>
     /// <returns></returns>
-    public async Task CommitFilesAsync(List<GitFile> filesToCommit, string repoUri, string branch, string commitMessage)
+    public async Task CommitFilesAsync(List<GitFile> filesToCommit, string branch, string commitMessage)
         => await CommitFilesAsync(
             filesToCommit,
-            repoUri,
             branch,
             commitMessage,
             _logger,
-            await _tokenProvider.GetTokenForRepositoryAsync(repoUri),
+            await _tokenProvider.GetTokenForRepositoryAsync(_repoUri),
             "DotNet-Bot",
             "dn-bot@microsoft.com");
 
@@ -1494,19 +1424,16 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <summary>
     /// Checks that a repository exists
     /// </summary>
-    /// <param name="repoUri">Repository uri</param>
     /// <returns>True if the repository exists, false otherwise.</returns>
-    public async Task<bool> RepoExistsAsync(string repoUri)
+    public async Task<bool> RepoExistsAsync()
     {
-        (string accountName, string projectName, string repoName) = ParseRepoUri(repoUri);
-
         try
         {
             await ExecuteAzureDevOpsAPIRequestAsync(
                 HttpMethod.Get,
-                accountName,
-                projectName,
-                $"_apis/git/repositories/{repoName}",
+                _accountName,
+                _projectName,
+                $"_apis/git/repositories/{_repoName}",
                 _logger,
                 logFailure: false);
             return true;
@@ -1524,8 +1451,7 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     public async Task DeletePullRequestBranchAsync(string pullRequestUri)
     {
         PullRequest pr = await GetPullRequestAsync(pullRequestUri);
-        (string account, string project, string repo, int id) prInfo = ParsePullRequestUri(pullRequestUri);
-        await DeleteBranchAsync(prInfo.account, prInfo.project, prInfo.repo, pr.HeadBranch);
+        await DeleteBranchAsync(pr.HeadBranch);
     }
 
     /// <summary>
