@@ -56,10 +56,9 @@ public interface IRemote
     /// <summary>
     ///     Create a new pull request.
     /// </summary>
-    /// <param name="repoUri">Repository uri.</param>
     /// <param name="pullRequest">Information about pull request to create.</param>
     /// <returns>URI of new pull request.</returns>
-    Task<string> CreatePullRequestAsync(string repoUri, PullRequest pullRequest);
+    Task<string> CreatePullRequestAsync(PullRequest pullRequest);
 
     /// <summary>
     ///     Update a pull request with new data.
@@ -84,7 +83,7 @@ public interface IRemote
     /// <param name="repoUri">repo to get the version from</param>
     /// <param name="commit">commit sha to query</param>
     /// <returns></returns>
-    Task<IEnumerable<string>> GetPackageSourcesAsync(string repoUri, string commit);
+    Task<IEnumerable<string>> GetPackageSourcesAsync(string commit);
 
     /// <summary>
     ///     Get the list of dependencies in the specified repo and branch/commit
@@ -93,7 +92,7 @@ public interface IRemote
     /// <param name="branchOrCommit">Commit to get dependencies at</param>
     /// <param name="name">Optional name of specific dependency to get information on</param>
     /// <returns>Matching dependency information.</returns>
-    Task<IEnumerable<DependencyDetail>> GetDependenciesAsync(string repoUri, string branchOrCommit, string name = null);
+    Task<IEnumerable<DependencyDetail>> GetDependenciesAsync(string branchOrCommit, string name = null);
 
     /// <summary>
     /// Retrieve the common script files from a remote source.
@@ -101,7 +100,7 @@ public interface IRemote
     /// <param name="repoUri">URI of repo containing script files.</param>
     /// <param name="commit">Common to get script files at.</param>
     /// <returns>Script files.</returns>
-    Task<List<GitFile>> GetCommonScriptFilesAsync(string repoUri, string commit);
+    Task<List<GitFile>> GetCommonScriptFilesAsync(string commit);
 
     /// <summary>
     ///     Create a new branch in the specified repository.
@@ -109,21 +108,21 @@ public interface IRemote
     /// <param name="repoUri">Repository to create a branch in</param>
     /// <param name="baseBranch">Branch to create <paramref name="newBranch"/> off of</param>
     /// <param name="newBranch">New branch name.</param>
-    Task CreateNewBranchAsync(string repoUri, string baseBranch, string newBranch);
+    Task CreateNewBranchAsync(string baseBranch, string newBranch);
 
     /// <summary>
     ///     Delete a branch in a repository.
     /// </summary>
     /// <param name="repoUri">Repository to delete a branch in.</param>
     /// <param name="branch">Branch to delete.</param>
-    Task DeleteBranchAsync(string repoUri, string branch);
+    Task DeleteBranchAsync(string branch);
 
     /// <summary>
     ///     Finds out whether a branch exists in the target repo.
     /// </summary>
     /// <param name="repoUri">Repository to find the branch in</param>
     /// <param name="branch">Branch to find</param>
-    Task<bool> BranchExistsAsync(string repoUri, string branch);
+    Task<bool> BranchExistsAsync(string branch);
 
     /// <summary>
     ///     Commit a set of updated dependencies to a repository
@@ -149,7 +148,7 @@ public interface IRemote
     /// <param name="baseCommit">Base version</param>
     /// <param name="targetCommit">Target version</param>
     /// <returns>Diff information</returns>
-    Task<GitDiff> GitDiffAsync(string repoUri, string baseCommit, string targetCommit);
+    Task<GitDiff> GitDiffAsync(string baseCommit, string targetCommit);
 
     /// <summary>
     ///     Get the latest commit in a branch
@@ -157,7 +156,7 @@ public interface IRemote
     /// <param name="repoUri">Remote repository</param>
     /// <param name="branch">Branch</param>
     /// <returns>Latest commit</returns>
-    Task<string> GetLatestCommitAsync(string repoUri, string branch);
+    Task<string> GetLatestCommitAsync(string branch);
 
     /// <summary>
     ///     Get the commits in a repo on the specific branch 
@@ -165,7 +164,7 @@ public interface IRemote
     /// <param name="repoUri">Repository uri</param>
     /// <param name="sha">Sha of the commit</param>
     /// <returns>Return the commit matching the specified sha. Null if no commit were found.</returns>
-    Task<Commit> GetCommitAsync(string repoUri, string sha);
+    Task<Commit> GetCommitAsync(string sha);
 
 
     /// <summary>
@@ -183,7 +182,7 @@ public interface IRemote
     /// <param name="targetDirectory">Directory to clone the repo to</param>
     /// <param name="checkoutSubmodules">Indicates whether submodules should be checked out as well</param>
     /// <param name="gitDirParent">Location for the .git directory, or null for default</param>
-    Task CloneAsync(string repoUri, string commit, string targetDirectory, bool checkoutSubmodules, string gitDirectory);
+    Task CloneAsync(string commit, string targetDirectory, bool checkoutSubmodules, string gitDirectory);
 
     #endregion
 }

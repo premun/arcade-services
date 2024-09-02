@@ -18,22 +18,19 @@ namespace Microsoft.DotNet.DarcLib;
 public class RemoteRepoBase : GitRepoCloner
 {
     private readonly ILogger _logger;
-    private readonly string _repoUri;
     private readonly IProcessManager _processManager;
 
     protected RemoteRepoBase(
-        string repoUri,
         IRemoteTokenProvider remoteConfiguration,
         IProcessManager processManager,
         string temporaryRepositoryPath,
         IMemoryCache cache,
         ILogger logger)
-        : base(repoUri, remoteConfiguration, new LocalLibGit2Client(remoteConfiguration, new NoTelemetryRecorder(), processManager, new FileSystem(), logger), logger)
+        : base(remoteConfiguration, new LocalLibGit2Client(remoteConfiguration, new NoTelemetryRecorder(), processManager, new FileSystem(), logger), logger)
     {
         TemporaryRepositoryPath = temporaryRepositoryPath ?? Path.GetTempPath();
         Cache = cache;
         _logger = logger;
-        _repoUri = repoUri;
         _processManager = processManager;
     }
 
@@ -59,6 +56,7 @@ public class RemoteRepoBase : GitRepoCloner
     /// <param name="commitMessage">The commmit message.</param>
     protected async Task CommitFilesAsync(
         List<GitFile> filesToCommit,
+        string repoUri,
         string branch,
         string commitMessage,
         ILogger logger,
@@ -73,8 +71,8 @@ public class RemoteRepoBase : GitRepoCloner
         {
             string clonedRepo = null;
 
-            logger.LogInformation("Sparse and shallow checkout of branch {branch} in {repoUri}...", branch, _repoUri);
-            clonedRepo = await SparseAndShallowCheckoutAsync(_repoUri, branch, tempRepoFolder, remote, dotnetMaestroName, dotnetMaestroEmail, pat);
+            logger.LogInformation("Sparse and shallow checkout of branch {branch} in {repoUri}...", branch, repoUri);
+            clonedRepo = await SparseAndShallowCheckoutAsync(repoUri, branch, tempRepoFolder, remote, dotnetMaestroName, dotnetMaestroEmail, pat);
 
             foreach (GitFile file in filesToCommit)
             {
@@ -111,7 +109,7 @@ public class RemoteRepoBase : GitRepoCloner
         {
             // This was originally a DarcException. Making it an actual Exception so we get to see in AppInsights if something failed while
             // commiting the changes
-            throw new Exception($"Something went wrong when pushing the files to repo {_repoUri} in branch {branch}", exc);
+            throw new Exception($"Something went wrong when pushing the files to repo {repoUri} in branch {branch}", exc);
         }
         finally
         {
@@ -146,6 +144,7 @@ public class RemoteRepoBase : GitRepoCloner
     /// <param name="repoFolderName">The name of the folder where the repo is located</param>
     /// <returns>The full path of the cloned repo</returns>
     private async Task<string> SparseAndShallowCheckoutAsync(
+        string repoUri,
         string branch,
         string workingDirectory,
         string remote,
@@ -159,7 +158,7 @@ public class RemoteRepoBase : GitRepoCloner
         await ExecuteGitCommand(["init", repoFolderName], workingDirectory);
 
         workingDirectory = Path.Combine(workingDirectory, repoFolderName);
-        var repoUri = _repoUri.Replace("https://", $"https://{user}:{pat}@");
+        repoUri = repoUri.Replace("https://", $"https://{user}:{pat}@");
 
         await ExecuteGitCommand(["remote", "add", remote, repoUri], workingDirectory, secretToMask: pat);
         await ExecuteGitCommand(["config", "core.sparsecheckout", "true"], workingDirectory);

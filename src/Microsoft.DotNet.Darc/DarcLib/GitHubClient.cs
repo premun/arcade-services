@@ -77,7 +77,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
         ILogger logger,
         string? temporaryRepositoryPath,
         IMemoryCache? cache)
-        : base(repoUri, remoteTokenProvider, processManager, temporaryRepositoryPath, cache, logger)
+        : base(remoteTokenProvider, processManager, temporaryRepositoryPath, cache, logger)
     {
         _repoUri = repoUri;
         (_repoOwner, _repoName) = ParseRepoUri(repoUri);
@@ -100,10 +100,12 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     /// <param name="filePath">Path to file</param>
     /// <param name="branch">Branch to get file contents from</param>
     /// <returns>File contents or throws on file not found.</returns>
-    public async Task<string> GetFileContentsAsync(string filePath, string branch)
+    public async Task<string> GetFileContentsAsync(string filePath, string repoUri, string branch)
     {
+        (string owner, string repoName) = ParseRepoUri(repoUri);
+
         _logger.LogInformation(
-            $"Getting the contents of file '{filePath}' from repo '{_repoOwner}/{_repoName}' in branch '{branch}'...");
+            $"Getting the contents of file '{filePath}' from repo '{owner}/{repoName}' in branch '{branch}'...");
 
         JObject responseContent;
         try
@@ -111,7 +113,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             using (HttpResponseMessage response = await ExecuteRemoteGitCommandAsync(
                        HttpMethod.Get,
                        _repoUri,
-                       $"repos/{_repoOwner}/{_repoName}/contents/{filePath}?ref={branch}",
+                       $"repos/{owner}/{repoName}/contents/{filePath}?ref={branch}",
                        _logger,
                        logFailure: false))
             {
@@ -121,13 +123,13 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             var content = responseContent["content"]!.ToString();
 
             _logger.LogInformation(
-                $"Getting the contents of file '{filePath}' from repo '{_repoOwner}/{_repoName}' in branch '{branch}' succeeded!");
+                $"Getting the contents of file '{filePath}' from repo '{owner}/{repoName}' in branch '{branch}' succeeded!");
 
             return this.GetDecodedContent(content);
         }
         catch (HttpRequestException reqEx) when (reqEx.Message.Contains(((int)HttpStatusCode.NotFound).ToString()))
         {
-            throw new DependencyFileNotFoundException(filePath, $"{_repoOwner}/{_repoName}", branch, reqEx);
+            throw new DependencyFileNotFoundException(filePath, $"{owner}/{repoName}", branch, reqEx);
         }
     }
 
@@ -1069,7 +1071,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             {
                 if (!DependencyFileManager.DependencyFiles.Contains(content.Path))
                 {
-                    string fileContent = await GetFileContentsAsync(content.Path, branch);
+                    string fileContent = await GetFileContentsAsync(content.Path, _repoUri, branch);
                     var gitCommit = new GitFile(content.Path, fileContent);
                     files.Add(gitCommit);
                 }
@@ -1127,16 +1129,18 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     ///     Commit or update a set of files to a repo
     /// </summary>
     /// <param name="filesToCommit">Files to comit</param>
+    /// <param name="repoUri">Remote repository URI</param>
     /// <param name="branch">Branch to push to</param>
     /// <param name="commitMessage">Commit message</param>
-    public async Task CommitFilesAsync(List<GitFile> filesToCommit, string branch, string commitMessage)
+    public async Task CommitFilesAsync(List<GitFile> filesToCommit, string repoUri, string branch, string commitMessage)
     {
         await CommitFilesAsync(
             filesToCommit,
+            repoUri,
             branch,
             commitMessage,
             _logger,
-            await _tokenProvider.GetTokenForRepositoryAsync(_repoUri),
+            await _tokenProvider.GetTokenForRepositoryAsync(repoUri),
             Constants.DarcBotName,
             Constants.DarcBotEmail);
     }

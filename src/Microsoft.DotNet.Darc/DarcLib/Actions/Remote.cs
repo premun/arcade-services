@@ -17,6 +17,7 @@ namespace Microsoft.DotNet.DarcLib;
 
 public sealed class Remote : IRemote
 {
+    private readonly string _repoUri;
     private readonly IVersionDetailsParser _versionDetailsParser;
     private readonly DependencyFileManager _fileManager;
     private readonly IRemoteGitRepo _remoteGitClient;
@@ -31,31 +32,33 @@ public sealed class Remote : IRemote
         new(@"\[DependencyUpdate\]: <> \(Begin\)([^\[]+)\[DependencyUpdate\]: <> \(End\)");
 
     public Remote(
+        string repoUri,
         IRemoteGitRepo remoteGitClient,
         IVersionDetailsParser versionDetailsParser,
         ILogger logger)
     {
         _logger = logger;
+        _repoUri = repoUri;
         _remoteGitClient = remoteGitClient;
         _versionDetailsParser = versionDetailsParser;
         _fileManager = new DependencyFileManager(remoteGitClient, _versionDetailsParser, _logger);
     }
 
-    public async Task CreateNewBranchAsync(string repoUri, string baseBranch, string newBranch)
+    public async Task CreateNewBranchAsync(string baseBranch, string newBranch)
     {
-        await _remoteGitClient.CreateBranchAsync(repoUri, newBranch, baseBranch);
+        await _remoteGitClient.CreateBranchAsync(newBranch, baseBranch);
     }
 
-    public async Task DeleteBranchAsync(string repoUri, string branch)
+    public async Task DeleteBranchAsync(string branch)
     {
-        _logger.LogInformation("Deleting branch '{branch}' from repo '{repoUri}'", branch, repoUri);
-        await _remoteGitClient.DeleteBranchAsync(repoUri, branch);
+        _logger.LogInformation("Deleting branch '{branch}' from repo '{repoUri}'", branch, _repoUri);
+        await _remoteGitClient.DeleteBranchAsync(branch);
     }
 
-    public Task<bool> BranchExistsAsync(string repoUri, string branch)
+    public Task<bool> BranchExistsAsync(string branch)
     {
-        _logger.LogInformation("Checking if branch '{branch}' exists in '{repoUri}'", branch, repoUri);
-        return _remoteGitClient.DoesBranchExistAsync(repoUri, branch); 
+        _logger.LogInformation("Checking if branch '{branch}' exists in '{repoUri}'", branch, _repoUri);
+        return _remoteGitClient.DoesBranchExistAsync(branch); 
     }
 
     /// <summary>
@@ -151,10 +154,10 @@ public sealed class Remote : IRemote
         _logger.LogInformation($"Merging pull request '{pullRequestUrl}' succeeded!");
     }
 
-    public async Task<IEnumerable<string>> GetPackageSourcesAsync(string repoUri, string commit)
+    public async Task<IEnumerable<string>> GetPackageSourcesAsync(string commit)
     {
         CheckForValidGitClient();
-        XmlDocument nugetConfig = await _fileManager.ReadNugetConfigAsync(repoUri, commit);
+        XmlDocument nugetConfig = await _fileManager.ReadNugetConfigAsync(_repoUri, commit);
         return _fileManager.GetPackageSources(nugetConfig).Select(nameAndFeed => nameAndFeed.feed);
     }
 
@@ -209,12 +212,12 @@ public sealed class Remote : IRemote
             // Files in the source arcade repo. We use the remote factory because the
             // arcade repo may be in github while this remote is targeted at AzDO.
             IRemote arcadeRemote = await remoteFactory.GetRemoteAsync(arcadeItem.RepoUri, _logger);
-            List<GitFile> engCommonFiles = await arcadeRemote.GetCommonScriptFilesAsync(arcadeItem.RepoUri, arcadeItem.Commit);
+            List<GitFile> engCommonFiles = await arcadeRemote.GetCommonScriptFilesAsync(arcadeItem.Commit);
             filesToCommit.AddRange(engCommonFiles);
 
             // Files in the target repo
-            string latestCommit = await _remoteGitClient.GetLastCommitShaAsync(repoUri, branch);
-            List<GitFile> targetEngCommonFiles = await GetCommonScriptFilesAsync(repoUri, latestCommit);
+            string latestCommit = await _remoteGitClient.GetLastCommitShaAsync(branch);
+            List<GitFile> targetEngCommonFiles = await GetCommonScriptFilesAsync(latestCommit);
 
             var deletedFiles = new List<string>();
 
@@ -248,7 +251,7 @@ public sealed class Remote : IRemote
 
         filesToCommit.AddRange(fileContainer.GetFilesToCommit());
 
-        await _remoteGitClient.CommitFilesAsync(filesToCommit, repoUri, branch, message);
+        await _remoteGitClient.CommitFilesAsync(filesToCommit, _repoUri, branch, message);
 
         return filesToCommit;
     }
@@ -259,20 +262,19 @@ public sealed class Remote : IRemote
         return _remoteGitClient.GetPullRequestAsync(pullRequestUri);
     }
 
-    public Task<string> CreatePullRequestAsync(string repoUri, PullRequest pullRequest)
+    public Task<string> CreatePullRequestAsync(PullRequest pullRequest)
     {
         CheckForValidGitClient();
-        return _remoteGitClient.CreatePullRequestAsync(repoUri, pullRequest);
+        return _remoteGitClient.CreatePullRequestAsync(pullRequest);
     }
 
     /// <summary>
     ///     Diff two commits in a repository and return information about them.
     /// </summary>
-    /// <param name="repoUri">Repository uri</param>
     /// <param name="baseVersion">Base version</param>
     /// <param name="targetVersion">Target version</param>
     /// <returns>Diff information</returns>
-    public async Task<GitDiff> GitDiffAsync(string repoUri, string baseVersion, string targetVersion)
+    public async Task<GitDiff> GitDiffAsync(string baseVersion, string targetVersion)
     {
         CheckForValidGitClient();
 
@@ -282,7 +284,7 @@ public sealed class Remote : IRemote
             return GitDiff.NoDiff(baseVersion);
         }
 
-        return await _remoteGitClient.GitDiffAsync(repoUri, baseVersion, targetVersion);
+        return await _remoteGitClient.GitDiffAsync(baseVersion, targetVersion);
     }
 
     /// <summary>
@@ -297,7 +299,7 @@ public sealed class Remote : IRemote
             return false;
         }
 
-        return await _remoteGitClient.RepoExistsAsync(repoUri);
+        return await _remoteGitClient.RepoExistsAsync();
     }
 
     /// <summary>
@@ -306,22 +308,21 @@ public sealed class Remote : IRemote
     /// <param name="repoUri">Remote repository</param>
     /// <param name="branch">Branch</param>
     /// <returns>Latest commit</returns>
-    public Task<string> GetLatestCommitAsync(string repoUri, string branch)
+    public Task<string> GetLatestCommitAsync(string branch)
     {
         CheckForValidGitClient();
-        return _remoteGitClient.GetLastCommitShaAsync(repoUri, branch);
+        return _remoteGitClient.GetLastCommitShaAsync(branch);
     }
 
     /// <summary>
     ///     Get a commit in a repo 
     /// </summary>
-    /// <param name="repoUri">Repository URI</param>
     /// <param name="sha">Sha of the commit</param>
     /// <returns>Return the commit matching the specified sha. Null if no commit were found.</returns>
-    public Task<Commit> GetCommitAsync(string repoUri, string sha)
+    public Task<Commit> GetCommitAsync(string sha)
     {
         CheckForValidGitClient();
-        return _remoteGitClient.GetCommitAsync(repoUri, sha);
+        return _remoteGitClient.GetCommitAsync(sha);
     }
 
     /// <summary>
@@ -331,12 +332,12 @@ public sealed class Remote : IRemote
     /// <param name="branchOrCommit">Commit to get dependencies at</param>
     /// <param name="name">Optional name of specific dependency to get information on</param>
     /// <returns>Matching dependency information.</returns>
-    public async Task<IEnumerable<DependencyDetail>> GetDependenciesAsync(string repoUri,
+    public async Task<IEnumerable<DependencyDetail>> GetDependenciesAsync(
         string branchOrCommit,
         string name = null)
     {
         CheckForValidGitClient();
-        VersionDetails versionDetails = await _fileManager.ParseVersionDetailsXmlAsync(repoUri, branchOrCommit);
+        VersionDetails versionDetails = await _fileManager.ParseVersionDetailsXmlAsync(_repoUri, branchOrCommit);
         return versionDetails.Dependencies
             .Where(dependency => string.IsNullOrEmpty(name) || dependency.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
     }
@@ -349,10 +350,10 @@ public sealed class Remote : IRemote
     /// <param name="targetDirectory">Directory to clone to</param>
     /// <param name="checkoutSubmodules">Indicates whether submodules should be checked out as well</param>
     /// <param name="gitDirectory">Location for the .git directory</param>
-    public async Task CloneAsync(string repoUri, string commit, string targetDirectory, bool checkoutSubmodules, string gitDirectory = null)
+    public async Task CloneAsync(string commit, string targetDirectory, bool checkoutSubmodules, string gitDirectory = null)
     {
         CheckForValidGitClient();
-        await _remoteGitClient.CloneAsync(repoUri, commit, targetDirectory, checkoutSubmodules, gitDirectory);
+        await _remoteGitClient.CloneAsync(_repoUri, commit, targetDirectory, checkoutSubmodules, gitDirectory);
     }
 
     /// <summary>
@@ -366,12 +367,12 @@ public sealed class Remote : IRemote
         }
     }
 
-    public async Task<List<GitFile>> GetCommonScriptFilesAsync(string repoUri, string commit)
+    public async Task<List<GitFile>> GetCommonScriptFilesAsync(string commit)
     {
         CheckForValidGitClient();
         _logger.LogInformation("Generating commits for script files");
 
-        List<GitFile> files = await _remoteGitClient.GetFilesAtCommitAsync(repoUri, commit, Constants.CommonScriptFilesPath);
+        List<GitFile> files = await _remoteGitClient.GetFilesAtCommitAsync(commit, Constants.CommonScriptFilesPath);
 
         _logger.LogInformation("Generating commits for script files succeeded!");
 

@@ -14,14 +14,12 @@ namespace Microsoft.DotNet.DarcLib;
 
 public class GitRepoCloner : IGitRepoCloner
 {
-    private readonly string _repoUri;
     private readonly IRemoteTokenProvider _remoteTokenProvider;
     private readonly ILocalLibGit2Client _localGitClient;
     private readonly ILogger _logger;
 
-    public GitRepoCloner(string repoUri, IRemoteTokenProvider remoteTokenProvider, ILocalLibGit2Client localGitClient, ILogger logger)
+    public GitRepoCloner(IRemoteTokenProvider remoteTokenProvider, ILocalLibGit2Client localGitClient, ILogger logger)
     {
-        _repoUri = repoUri;
         _remoteTokenProvider = remoteTokenProvider;
         _localGitClient = localGitClient;
         _logger = logger;
@@ -30,12 +28,14 @@ public class GitRepoCloner : IGitRepoCloner
     /// <summary>
     ///     Clone a remote git repo.
     /// </summary>
+    /// <param name="repoUri">Repository uri to clone</param>
     /// <param name="commit">Branch, commit, or tag to checkout</param>
     /// <param name="targetDirectory">Target directory to clone to</param>
     /// <param name="checkoutSubmodules">Indicates whether submodules should be checked out as well</param>
     /// <param name="gitDirectory">Location for the .git directory, or null for default</param>
-    public Task CloneAsync(string? commit, string targetDirectory, bool checkoutSubmodules, string? gitDirectory)
+    public Task CloneAsync(string repoUri, string? commit, string targetDirectory, bool checkoutSubmodules, string? gitDirectory)
         => CloneAsync(
+            repoUri,
             commit,
             targetDirectory,
             checkoutSubmodules ? CheckoutType.CheckoutWithSubmodules : CheckoutType.CheckoutWithoutSubmodules,
@@ -44,12 +44,13 @@ public class GitRepoCloner : IGitRepoCloner
     /// <summary>
     ///     Clone a remote git repo without checking out the working tree.
     /// </summary>
+    /// <param name="repoUri">Repository uri to clone</param>
     /// <param name="targetDirectory">Target directory to clone to</param>
     /// <param name="gitDirectory">Location for the .git directory, or null for default</param>
-    public Task CloneNoCheckoutAsync(string targetDirectory, string? gitDirectory)
-        => CloneAsync(null, targetDirectory, CheckoutType.NoCheckout, gitDirectory);
+    public Task CloneNoCheckoutAsync(string repoUri, string targetDirectory, string? gitDirectory)
+        => CloneAsync(repoUri, null, targetDirectory, CheckoutType.NoCheckout, gitDirectory);
 
-    private Task CloneAsync(string? commit, string targetDirectory, CheckoutType checkoutType, string? gitDirectory)
+    private Task CloneAsync(string repoUri, string? commit, string targetDirectory, CheckoutType checkoutType, string? gitDirectory)
     {
         CloneOptions cloneOptions = new()
         {
@@ -60,17 +61,17 @@ public class GitRepoCloner : IGitRepoCloner
                     // The PAT is actually the only thing that matters here, the username
                     // will be ignored.
                     Username = RemoteTokenProvider.GitRemoteUser,
-                    Password = _remoteTokenProvider.GetTokenForRepository(_repoUri),
+                    Password = _remoteTokenProvider.GetTokenForRepository(repoUri),
                 },
         };
 
-        _logger.LogInformation("Cloning {repoUri} to {targetDirectory}", _repoUri, targetDirectory);
+        _logger.LogInformation("Cloning {repoUri} to {targetDirectory}", repoUri, targetDirectory);
 
         try
         {
-            _logger.LogDebug($"Cloning {_repoUri} to {targetDirectory}");
+            _logger.LogDebug($"Cloning {repoUri} to {targetDirectory}");
             string repoPath = Repository.Clone(
-                _repoUri,
+                repoUri,
                 targetDirectory,
                 cloneOptions);
 
@@ -116,7 +117,7 @@ public class GitRepoCloner : IGitRepoCloner
         }
         catch (Exception exc)
         {
-            throw new Exception($"Something went wrong when cloning repo {_repoUri} at {commit ?? "<default branch>"} into {targetDirectory}", exc);
+            throw new Exception($"Something went wrong when cloning repo {repoUri} at {commit ?? "<default branch>"} into {targetDirectory}", exc);
         }
     }
 

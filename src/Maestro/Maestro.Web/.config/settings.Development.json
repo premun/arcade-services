@@ -3,13 +3,13 @@
         "StorageAccountTablesUri": "https://maestroint.table.core.windows.net",
         "TableName": "healthreport"
     },
-    "KeyVaultUri": "https://maestrolocal.vault.azure.net/",
+    "KeyVaultUri": "https://maestroint.vault.azure.net/",
     "AppConfigurationUri": "https://maestrolocal.azconfig.io/",
     "BuildAssetRegistry": {
         "ConnectionString": "Data Source=localhost\\SQLEXPRESS;Initial Catalog=BuildAssetRegistry;Integrated Security=true"
     },
     "ApiRedirect": {
-        "Uri": "https://maestro.dot.net/"
+        //"Uri": "https://maestro.dot.net/"
     },
     "DataProtection": {
         "KeyFileUri": "",

@@ -50,6 +50,8 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
     // Azure DevOps uses this id when creating a new branch as well as when deleting a branch
     private static readonly string BaseObjectId = "0000000000000000000000000000000000000000";
 
+    private static readonly List<string> VersionTypes = ["branch", "commit", "tag"];
+
     private readonly string _repoUri;
     private readonly string _accountName;
     private readonly string _projectName;
@@ -65,7 +67,7 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
     }
 
     public AzureDevOpsClient(string repoUri, IAzureDevOpsTokenProvider tokenProvider, IProcessManager processManager, ILogger logger, string temporaryRepositoryPath)
-        : base(repoUri, tokenProvider, processManager, temporaryRepositoryPath, null, logger)
+        : base(tokenProvider, processManager, temporaryRepositoryPath, null, logger)
     {
         _repoUri = repoUri;
         (_accountName, _projectName, _repoName) = ParseRepoUri(repoUri);
@@ -80,20 +82,38 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
 
     public bool AllowRetries { get; set; } = true;
 
-    private static readonly List<string> VersionTypes = ["branch", "commit", "tag"];
+    /// <summary>
+    /// Retrieve the contents of a text file in a repo on a specific branch
+    /// </summary>
+    /// <param name="filePath">Path to file within the repo</param>
+    /// <param name="repoUri">Repository url</param>
+    /// <param name="branch">Branch or commit</param>
+    /// <returns>Content of file</returns>
+    public Task<string> GetFileContentsAsync(string filePath, string repoUri, string branch)
+    {
+        (string accountName, string projectName, string repoName) = ParseRepoUri(repoUri);
+
+        return GetFileContentsAsync(accountName, projectName, repoName, filePath, branch);
+    }
 
     /// <summary>
     ///     Retrieve the contents of a text file in a repo on a specific branch
     /// </summary>
+    /// <param name="accountName">Azure DevOps account</param>
+    /// <param name="projectName">Azure DevOps project</param>
+    /// <param name="repoName">Azure DevOps repo</param>
     /// <param name="filePath">Path to file</param>
     /// <param name="branchOrCommit">Branch</param>
     /// <returns>Contents of file as string</returns>
-    public async Task<string> GetFileContentsAsync(
+    private async Task<string> GetFileContentsAsync(
+        string accountName,
+        string projectName,
+        string repoName,
         string filePath,
         string branchOrCommit)
     {
         _logger.LogInformation(
-            $"Getting the contents of file '{filePath}' from repo '{_accountName}/{_projectName}/{_repoName}' in branch/commit '{branchOrCommit}'...");
+            $"Getting the contents of file '{filePath}' from repo '{accountName}/{projectName}/{repoName}' in branch/commit '{branchOrCommit}'...");
 
         // The AzDO REST API currently does not transparently handle commits vs. branches vs. tags.
         // You really need to know whether you're talking about a commit or branch or tag
@@ -106,9 +126,9 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
             {
                 JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
                     HttpMethod.Get,
-                    _accountName,
-                    _projectName,
-                    $"_apis/git/repositories/{_repoName}/items?path={filePath}&versionType={versionType}&version={branchOrCommit}&includeContent=true",
+                    accountName,
+                    projectName,
+                    $"_apis/git/repositories/{repoName}/items?path={filePath}&versionType={versionType}&version={branchOrCommit}&includeContent=true",
                     _logger,
                     // Don't log the failure so users don't get confused by 404 messages popping up in expected circumstances.
                     logFailure: false);
@@ -121,7 +141,7 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
             }
         }
 
-        throw new DependencyFileNotFoundException(filePath, $"{_repoName}", branchOrCommit, lastException);
+        throw new DependencyFileNotFoundException(filePath, $"{repoName}", branchOrCommit, lastException);
     }
 
     /// <summary>
@@ -556,7 +576,7 @@ This pull request has not been merged because Maestro++ is waiting on the follow
             {
                 if (!DependencyFileManager.DependencyFiles.Contains(item.Path))
                 {
-                    string fileContent = await GetFileContentsAsync(item.Path, commit);
+                    string fileContent = await GetFileContentsAsync(item.Path, _repoUri, commit);
                     var gitCommit = new GitFile(item.Path.TrimStart('/'), fileContent);
                     files.Add(gitCommit);
                 }
@@ -934,9 +954,10 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <param name="branch">Branch to push to</param>
     /// <param name="commitMessage">Commit message</param>
     /// <returns></returns>
-    public async Task CommitFilesAsync(List<GitFile> filesToCommit, string branch, string commitMessage)
+    public async Task CommitFilesAsync(List<GitFile> filesToCommit, string repoUri, string branch, string commitMessage)
         => await CommitFilesAsync(
             filesToCommit,
+            repoUri,
             branch,
             commitMessage,
             _logger,
