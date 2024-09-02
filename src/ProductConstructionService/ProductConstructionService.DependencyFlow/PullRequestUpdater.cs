@@ -486,7 +486,7 @@ internal abstract class PullRequestUpdater : IPullRequestUpdater
         }
 
         var newBranchName = GetNewBranchName(targetBranch);
-        await darcRemote.CreateNewBranchAsync(targetRepository, targetBranch, newBranchName);
+        await darcRemote.CreateNewBranchAsync(targetBranch, newBranchName);
 
         try
         {
@@ -527,7 +527,6 @@ internal abstract class PullRequestUpdater : IPullRequestUpdater
             };
 
             var prUrl = await darcRemote.CreatePullRequestAsync(
-                targetRepository,
                 new PullRequest
                 {
                     Title = await _pullRequestBuilder.GeneratePRTitleAsync(inProgressPr, targetBranch),
@@ -561,12 +560,12 @@ internal abstract class PullRequestUpdater : IPullRequestUpdater
 
             // Something wrong happened when trying to create the PR but didn't throw an exception (probably there was no diff).
             // We need to delete the branch also in this case.
-            await darcRemote.DeleteBranchAsync(targetRepository, newBranchName);
+            await darcRemote.DeleteBranchAsync(newBranchName);
             return null;
         }
         catch
         {
-            await darcRemote.DeleteBranchAsync(targetRepository, newBranchName);
+            await darcRemote.DeleteBranchAsync(newBranchName);
             throw;
         }
     }
@@ -842,7 +841,7 @@ internal abstract class PullRequestUpdater : IPullRequestUpdater
 
             // Step 2. Wait for the branch to be created
             IRemote remote = await _remoteFactory.GetRemoteAsync(targetRepository, _logger);
-            if (!await remote.BranchExistsAsync(targetRepository, codeFlowStatus.PrBranch))
+            if (!await remote.BranchExistsAsync(codeFlowStatus.PrBranch))
             {
                 _logger.LogInformation("Branch {branch} for subscription {subscriptionId} not created yet. Will check again later",
                     codeFlowStatus.PrBranch,
@@ -978,7 +977,6 @@ internal abstract class PullRequestUpdater : IPullRequestUpdater
             var description = await _pullRequestBuilder.GenerateCodeFlowPRDescriptionAsync(update);
 
             var prUrl = await darcRemote.CreatePullRequestAsync(
-                targetRepository,
                 new PullRequest
                 {
                     Title = title,
@@ -1015,7 +1013,7 @@ internal abstract class PullRequestUpdater : IPullRequestUpdater
         }
         catch
         {
-            await darcRemote.DeleteBranchAsync(targetRepository, prBranch);
+            await darcRemote.DeleteBranchAsync(prBranch);
             throw;
         }
     }

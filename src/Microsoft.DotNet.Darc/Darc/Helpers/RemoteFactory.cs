@@ -22,7 +22,7 @@ internal class RemoteFactory : IRemoteFactory
     public static IRemote GetRemote(ICommandLineOptions options, string repoUrl, ILogger logger)
     {
         IRemoteGitRepo gitClient = GetRemoteGitClient(options, repoUrl, logger);
-        return new Remote(gitClient, new VersionDetailsParser(), logger);
+        return new Remote(repoUrl, gitClient, new VersionDetailsParser(), logger);
     }
 
     public static IBarApiClient GetBarClient(ICommandLineOptions options, ILogger logger)
@@ -51,6 +51,7 @@ internal class RemoteFactory : IRemoteFactory
         {
             GitRepoType.GitHub =>
                 new GitHubClient(
+                    repoUrl,
                     options.GetGitHubTokenProvider(),
                     new ProcessManager(logger, options.GitLocation),
                     logger,
@@ -60,6 +61,7 @@ internal class RemoteFactory : IRemoteFactory
 
             GitRepoType.AzureDevOps =>
                 new AzureDevOpsClient(
+                    repoUrl,
                     options.GetAzdoTokenProvider(),
                     new ProcessManager(logger, options.GitLocation),
                     logger,

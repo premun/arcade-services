@@ -50,7 +50,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     private readonly string _userAgent = $"DarcLib-{DarcLibVersion}";
     private readonly Lazy<IGitHubClient> _lazyClient;
 
-    private IGitHubClient Client => _lazyClient.Value;
+    internal virtual IGitHubClient Client => _lazyClient.Value;
 
     static GitHubClient()
     {

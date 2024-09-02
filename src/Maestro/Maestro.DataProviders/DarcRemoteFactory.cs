@@ -46,7 +46,7 @@ public class DarcRemoteFactory : IRemoteFactory
         using (_operations.BeginOperation($"Getting remote for repo {repoUrl}."))
         {
             IRemoteGitRepo remoteGitClient = await GetRemoteGitClient(repoUrl, logger);
-            return new Remote(remoteGitClient, _versionDetailsParser, logger);
+            return new Remote(repoUrl, remoteGitClient, _versionDetailsParser, logger);
         }
     }
 
@@ -79,12 +79,13 @@ public class DarcRemoteFactory : IRemoteFactory
             GitRepoType.GitHub => installationId == default
                 ? throw new GithubApplicationInstallationException($"No installation is available for repository '{normalizedUrl}'")
                 : new GitHubClient(
+                    repoUrl,
                     new Microsoft.DotNet.DarcLib.GitHubTokenProvider(_gitHubTokenProvider),
                     _processManager,
                     logger,
                     _cache.Cache),
 
-            GitRepoType.AzureDevOps => new AzureDevOpsClient(_azdoTokenProvider, _processManager, logger),
+            GitRepoType.AzureDevOps => new AzureDevOpsClient(repoUrl, _azdoTokenProvider, _processManager, logger),
 
             _ => throw new NotImplementedException($"Unknown repo url type {normalizedUrl}"),
         };

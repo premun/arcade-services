@@ -92,9 +92,9 @@ public class RemoteTests
 
         var logger = new NUnitLogger();
 
-        var remote = new Remote(client.Object, new VersionDetailsParser(), logger);
+        var remote = new Remote("https://github.com/test/test2", client.Object, new VersionDetailsParser(), logger);
 
-        await remote.MergeDependencyPullRequestAsync("https://github.com/test/test2", mergePullRequest);
+        await remote.MergeDependencyPullRequestAsync("https://github.com/test/test2/pulls/2", mergePullRequest);
         var expectedCommitMessage =
             """
             [352119842] Update dependencies from maestro-auth-test/maestro-test1

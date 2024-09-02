@@ -59,7 +59,7 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
             .Verify(r => r.GetRequiredNonCoherencyUpdates(SourceRepo, NewCommit, Capture.In(assets), Capture.In(dependencies)));
 
         DarcRemotes[TargetRepo]
-            .Verify(r => r.GetDependenciesAsync(TargetRepo, prExists ? InProgressPrHeadBranch : TargetBranch, null));
+            .Verify(r => r.GetDependenciesAsync(prExists ? InProgressPrHeadBranch : TargetBranch, null));
 
         UpdateResolver
             .Verify(r => r.GetRequiredCoherencyUpdatesAsync(Capture.In(dependencies), RemoteFactory.Object));
@@ -82,7 +82,7 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
     {
         var captureNewBranch = new CaptureMatch<string>(newBranch => _newBranch = newBranch);
         DarcRemotes[TargetRepo]
-            .Verify(r => r.CreateNewBranchAsync(TargetRepo, TargetBranch, Capture.With(captureNewBranch)));
+            .Verify(r => r.CreateNewBranchAsync(TargetBranch, Capture.With(captureNewBranch)));
     }
 
     protected void AndCommitUpdatesShouldHaveBeenCalled(Build withUpdatesFromBuild)
@@ -118,7 +118,7 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
     {
         var pullRequests = new List<PullRequest>();
         DarcRemotes[TargetRepo]
-            .Verify(r => r.CreatePullRequestAsync(TargetRepo, Capture.In(pullRequests)));
+            .Verify(r => r.CreatePullRequestAsync(Capture.In(pullRequests)));
 
         pullRequests.Should()
             .BeEquivalentTo(
@@ -139,7 +139,7 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
     {
         var pullRequests = new List<PullRequest>();
         DarcRemotes[TargetRepo]
-            .Verify(r => r.CreatePullRequestAsync(TargetRepo, Capture.In(pullRequests)));
+            .Verify(r => r.CreatePullRequestAsync(Capture.In(pullRequests)));
 
         pullRequests.Should()
             .BeEquivalentTo(
@@ -184,21 +184,21 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
     protected void CreatePullRequestShouldReturnAValidValue()
     {
         DarcRemotes[TargetRepo]
-            .Setup(s => s.CreatePullRequestAsync(It.IsAny<string>(), It.IsAny<PullRequest>()))
+            .Setup(s => s.CreatePullRequestAsync(It.IsAny<PullRequest>()))
             .ReturnsAsync(InProgressPrUrl);
     }
 
     protected void WithExistingPrBranch()
     {
         DarcRemotes[TargetRepo]
-            .Setup(s => s.BranchExistsAsync(TargetRepo, It.IsAny<string>()))
+            .Setup(s => s.BranchExistsAsync(It.IsAny<string>()))
             .ReturnsAsync(true);
     }
 
     protected void WithoutExistingPrBranch()
     {
         DarcRemotes[TargetRepo]
-            .Setup(s => s.BranchExistsAsync(TargetRepo, It.IsAny<string>()))
+            .Setup(s => s.BranchExistsAsync(It.IsAny<string>()))
             .ReturnsAsync(false);
     }
 

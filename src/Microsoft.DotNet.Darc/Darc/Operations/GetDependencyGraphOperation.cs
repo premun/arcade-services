@@ -87,7 +87,6 @@ internal class GetDependencyGraphOperation : Operation
                     // if an original asset name is passed, then this will do the initial filtering.
                     IRemote rootRepoRemote = await _remoteFactory.GetRemoteAsync(_options.RepoUri, _logger);
                     rootDependencies = await rootRepoRemote.GetDependenciesAsync(
-                        _options.RepoUri,
                         _options.Version,
                         _options.AssetName);
                 }
