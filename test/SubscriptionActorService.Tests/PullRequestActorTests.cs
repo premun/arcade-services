@@ -129,7 +129,7 @@ internal abstract class PullRequestActorTests : SubscriptionOrPullRequestActorTe
         _updateResolver
             .Verify(r => r.GetRequiredNonCoherencyUpdates(SourceRepo, NewCommit, Capture.In(assets), Capture.In(dependencies)));
         _darcRemotes[TargetRepo]
-            .Verify(r => r.GetDependenciesAsync(TargetRepo, prExists ? InProgressPrHeadBranch : TargetBranch, null));
+            .Verify(r => r.GetDependenciesAsync(prExists ? InProgressPrHeadBranch : TargetBranch, null));
         _updateResolver
             .Verify(r => r.GetRequiredCoherencyUpdatesAsync(Capture.In(dependencies), _remoteFactory.Object));
         assets.Should()
@@ -150,7 +150,7 @@ internal abstract class PullRequestActorTests : SubscriptionOrPullRequestActorTe
     {
         var captureNewBranch = new CaptureMatch<string>(newBranch => _newBranch = newBranch);
         _darcRemotes[TargetRepo]
-            .Verify(r => r.CreateNewBranchAsync(TargetRepo, TargetBranch, Capture.With(captureNewBranch)));
+            .Verify(r => r.CreateNewBranchAsync(TargetBranch, Capture.With(captureNewBranch)));
     }
 
     protected void AndCommitUpdatesShouldHaveBeenCalled(Build withUpdatesFromBuild)
@@ -185,7 +185,7 @@ internal abstract class PullRequestActorTests : SubscriptionOrPullRequestActorTe
     {
         var pullRequests = new List<PullRequest>();
         _darcRemotes[TargetRepo]
-            .Verify(r => r.CreatePullRequestAsync(TargetRepo, Capture.In(pullRequests)));
+            .Verify(r => r.CreatePullRequestAsync(Capture.In(pullRequests)));
         pullRequests.Should()
             .BeEquivalentTo(
                 new List<PullRequest>
@@ -205,7 +205,7 @@ internal abstract class PullRequestActorTests : SubscriptionOrPullRequestActorTe
     {
         var pullRequests = new List<PullRequest>();
         _darcRemotes[TargetRepo]
-            .Verify(r => r.CreatePullRequestAsync(TargetRepo, Capture.In(pullRequests)));
+            .Verify(r => r.CreatePullRequestAsync(Capture.In(pullRequests)));
 
         pullRequests.Should()
             .BeEquivalentTo(
@@ -275,21 +275,21 @@ internal abstract class PullRequestActorTests : SubscriptionOrPullRequestActorTe
     protected void CreatePullRequestShouldReturnAValidValue()
     {
         _darcRemotes[TargetRepo]
-            .Setup(s => s.CreatePullRequestAsync(It.IsAny<string>(), It.IsAny<PullRequest>()))
+            .Setup(s => s.CreatePullRequestAsync(It.IsAny<PullRequest>()))
             .ReturnsAsync(PrUrl);
     }
 
     protected void WithExistingPrBranch()
     {
         _darcRemotes[TargetRepo]
-            .Setup(s => s.BranchExistsAsync(TargetRepo, It.IsAny<string>()))
+            .Setup(s => s.BranchExistsAsync(It.IsAny<string>()))
             .ReturnsAsync(true);
     }
 
     protected void WithoutExistingPrBranch()
     {
         _darcRemotes[TargetRepo]
-            .Setup(s => s.BranchExistsAsync(TargetRepo, It.IsAny<string>()))
+            .Setup(s => s.BranchExistsAsync(It.IsAny<string>()))
             .ReturnsAsync(false);
     }
 

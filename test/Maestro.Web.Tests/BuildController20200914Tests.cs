@@ -92,7 +92,7 @@ public partial class BuildController20200914Tests
             var mockIRemoteFactory = new Mock<IRemoteFactory>();
             var mockIRemote = new Mock<IRemote>();
             mockIRemoteFactory.Setup(f => f.GetRemoteAsync(Repository, It.IsAny<ILogger>())).ReturnsAsync(mockIRemote.Object);
-            mockIRemote.Setup(f => f.GetCommitAsync(Repository, CommitHash)).ReturnsAsync(new Microsoft.DotNet.DarcLib.Commit(Account, CommitHash, CommitMessage));
+            mockIRemote.Setup(f => f.GetCommitAsync(CommitHash)).ReturnsAsync(new Microsoft.DotNet.DarcLib.Commit(Account, CommitHash, CommitMessage));
 
             collection.AddSingleton(mockIRemote.Object);
             collection.AddSingleton(mockIRemoteFactory.Object);

@@ -56,7 +56,7 @@ public class ProductDependencyCyclesHealthMetric : HealthMetric
 
         // Evaluate and find out what the latest is on the branch
         var remote = await _remoteFactory.GetRemoteAsync(_repository, _logger);
-        var commit = await remote.GetLatestCommitAsync(_repository, _branch);
+        var commit = await remote.GetLatestCommitAsync(_branch);
 
         if (commit == null)
         {

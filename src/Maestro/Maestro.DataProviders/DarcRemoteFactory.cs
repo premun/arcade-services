@@ -3,7 +3,6 @@
 
 using System;
 using System.Threading.Tasks;
-using Maestro.Common.AzureDevOpsTokens;
 using Maestro.Data;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.DarcLib.Helpers;
@@ -21,12 +20,12 @@ public class DarcRemoteFactory : IRemoteFactory
     private readonly BuildAssetRegistryContext _context;
     private readonly DarcRemoteMemoryCache _cache;
     private readonly IGitHubTokenProvider _gitHubTokenProvider;
-    private readonly IAzureDevOpsTokenProvider _azdoTokenProvider;
+    private readonly IAzureDevOpsClientFactory _azdoClientFactory;
 
     public DarcRemoteFactory(
         BuildAssetRegistryContext context,
         IGitHubTokenProvider gitHubTokenProvider,
-        IAzureDevOpsTokenProvider azdoTokenProvider,
+        IAzureDevOpsClientFactory azdoClientFactory,
         IVersionDetailsParser versionDetailsParser,
         DarcRemoteMemoryCache memoryCache,
         OperationManager operations,
@@ -37,7 +36,7 @@ public class DarcRemoteFactory : IRemoteFactory
         _versionDetailsParser = versionDetailsParser;
         _context = context;
         _gitHubTokenProvider = gitHubTokenProvider;
-        _azdoTokenProvider = azdoTokenProvider;
+        _azdoClientFactory = azdoClientFactory;
         _cache = memoryCache;
     }
 
@@ -46,7 +45,7 @@ public class DarcRemoteFactory : IRemoteFactory
         using (_operations.BeginOperation($"Getting remote for repo {repoUrl}."))
         {
             IRemoteGitRepo remoteGitClient = await GetRemoteGitClient(repoUrl, logger);
-            return new Remote(remoteGitClient, _versionDetailsParser, logger);
+            return new Remote(repoUrl, remoteGitClient, _versionDetailsParser, logger);
         }
     }
 
@@ -79,12 +78,13 @@ public class DarcRemoteFactory : IRemoteFactory
             GitRepoType.GitHub => installationId == default
                 ? throw new GithubApplicationInstallationException($"No installation is available for repository '{normalizedUrl}'")
                 : new GitHubClient(
+                    repoUrl,
                     new Microsoft.DotNet.DarcLib.GitHubTokenProvider(_gitHubTokenProvider),
                     _processManager,
                     logger,
                     _cache.Cache),
 
-            GitRepoType.AzureDevOps => new AzureDevOpsClient(_azdoTokenProvider, _processManager, logger),
+            GitRepoType.AzureDevOps => _azdoClientFactory.GetAzureDevOpsClient(repoUrl),
 
             _ => throw new NotImplementedException($"Unknown repo url type {normalizedUrl}"),
         };

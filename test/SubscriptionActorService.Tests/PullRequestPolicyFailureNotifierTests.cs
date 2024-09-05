@@ -94,7 +94,7 @@ public class PullRequestPolicyFailureNotifierTests
                 return Task.FromResult((IList<Check>) checksToReturn);
             });
 
-        MockRemote = new Remote(GitRepo.Object, new VersionDetailsParser(), NullLogger.Instance);
+        MockRemote = new Remote("https://github.com/dotnet/dotnet", GitRepo.Object, new VersionDetailsParser(), NullLogger.Instance);
 
         RemoteFactory = new Mock<IRemoteFactory>(MockBehavior.Strict);
         RemoteFactory.Setup(m => m.GetRemoteAsync(It.IsAny<string>(), It.IsAny<ILogger>())).ReturnsAsync(MockRemote);

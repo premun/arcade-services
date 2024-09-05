@@ -53,7 +53,7 @@ public static class Program
         });
         services.AddSingleton<IAzureDevOpsTokenProvider, AzureDevOpsTokenProvider>();
         services.Configure<AzureDevOpsTokenProviderOptions>("AzureDevOps", (o, s) => s.Bind(o));
-        services.TryAddTransient<IAzureDevOpsClient, AzureDevOpsClient>();
+        services.TryAddTransient<IAzureDevOpsClientFactory, AzureDevOpsClientFactory>();
         services.TryAddTransient<ILogger>(sp => sp.GetRequiredService<ILogger<FeedCleanerService>>());
         services.TryAddTransient<IProcessManager>(sp => ActivatorUtilities.CreateInstance<ProcessManager>(sp, "git"));
     }

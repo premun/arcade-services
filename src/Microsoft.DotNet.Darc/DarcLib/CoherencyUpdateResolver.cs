@@ -389,7 +389,7 @@ public class CoherencyUpdateResolver : ICoherencyUpdateResolver
             if (!nugetConfigCache.TryGetValue(parentCoherentDependencyCacheKey, out IEnumerable<string> nugetFeeds))
             {
                 IRemote remoteClient = await remoteFactory.GetRemoteAsync(parentCoherentDependency.RepoUri, _logger);
-                nugetFeeds = await remoteClient.GetPackageSourcesAsync(parentCoherentDependency.RepoUri, parentCoherentDependency.Commit);
+                nugetFeeds = await remoteClient.GetPackageSourcesAsync(parentCoherentDependency.Commit);
             }
 
             // Find assets with locations that match any feed in the nuget.config file.

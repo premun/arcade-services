@@ -716,7 +716,7 @@ namespace SubscriptionActorService
             }
 
             string newBranchName = GetNewBranchName(targetBranch);
-            await darcRemote.CreateNewBranchAsync(targetRepository, targetBranch, newBranchName);
+            await darcRemote.CreateNewBranchAsync(targetBranch, newBranchName);
 
             try
             {
@@ -755,7 +755,6 @@ namespace SubscriptionActorService
                 };
 
                 string prUrl = await darcRemote.CreatePullRequestAsync(
-                    targetRepository,
                     new PullRequest
                     {
                         Title = await _pullRequestBuilder.GeneratePRTitleAsync(inProgressPr, targetBranch),
@@ -790,12 +789,12 @@ namespace SubscriptionActorService
 
                 // Something wrong happened when trying to create the PR but didn't throw an exception (probably there was no diff).
                 // We need to delete the branch also in this case.
-                await darcRemote.DeleteBranchAsync(targetRepository, newBranchName);
+                await darcRemote.DeleteBranchAsync(newBranchName);
                 return null;
             }
             catch
             {
-                await darcRemote.DeleteBranchAsync(targetRepository, newBranchName);
+                await darcRemote.DeleteBranchAsync(newBranchName);
                 throw;
             }
         }
@@ -1114,7 +1113,7 @@ namespace SubscriptionActorService
 
                 // Step 2. Wait for the branch to be created
                 IRemote remote = await _remoteFactory.GetRemoteAsync(targetRepository, _logger);
-                if (!await remote.BranchExistsAsync(targetRepository, codeFlowStatus.PrBranch))
+                if (!await remote.BranchExistsAsync(codeFlowStatus.PrBranch))
                 {
                     _logger.LogInformation("Branch {branch} for subscription {subscriptionId} not created yet. Will check again later",
                         codeFlowStatus.PrBranch,
@@ -1236,7 +1235,6 @@ namespace SubscriptionActorService
                 string description = await _pullRequestBuilder.GenerateCodeFlowPRDescriptionAsync(update);
 
                 string prUrl = await darcRemote.CreatePullRequestAsync(
-                    targetRepository,
                     new PullRequest
                     {
                         Title = title,
@@ -1275,7 +1273,7 @@ namespace SubscriptionActorService
             }
             catch
             {
-                await darcRemote.DeleteBranchAsync(targetRepository, prBranch);
+                await darcRemote.DeleteBranchAsync(prBranch);
                 throw;
             }
         }

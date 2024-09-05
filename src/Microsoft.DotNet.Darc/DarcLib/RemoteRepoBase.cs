@@ -52,7 +52,6 @@ public class RemoteRepoBase : GitRepoCloner
     /// we need avoiding to check the complete repo shaving time from the overall push process
     /// </summary>
     /// <param name="filesToCommit">Collection of files to update.</param>
-    /// <param name="repoUri">The repository to push the files to.</param>
     /// <param name="branch">The branch to push the files to.</param>
     /// <param name="commitMessage">The commmit message.</param>
     protected async Task CommitFilesAsync(
@@ -136,7 +135,6 @@ public class RemoteRepoBase : GitRepoCloner
     /// Since LibGit2Sharp doesn't support neither sparse checkout not shallow clone
     /// we implement the flow ourselves.
     /// </summary>
-    /// <param name="repoUri">The repo to clone Uri</param>
     /// <param name="branch">The branch to checkout</param>
     /// <param name="workingDirectory">The working directory</param>
     /// <param name="remote">The name of the remote</param>

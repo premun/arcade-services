@@ -46,12 +46,14 @@ public class GitRepoFactory : IGitRepoFactory
     public IGitRepo CreateClient(string repoUri) => GitRepoUrlParser.ParseTypeFromUri(repoUri) switch
     {
         GitRepoType.AzureDevOps => new AzureDevOpsClient(
+            repoUri,
             _azdoTokenProvider,
             _processManager,
             _loggerFactory.CreateLogger<AzureDevOpsClient>(),
             _temporaryPath),
 
         GitRepoType.GitHub => new GitHubClient(
+            repoUri,
             _remoteTokenProvider,
             _processManager,
             _loggerFactory.CreateLogger<GitHubClient>(),

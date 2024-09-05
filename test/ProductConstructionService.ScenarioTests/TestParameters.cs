@@ -131,7 +131,7 @@ public class TestParameters : IDisposable
         string gitHubToken,
         IProductConstructionServiceApi pcsApi,
         Octokit.GitHubClient gitHubApi,
-        AzureDevOpsClient azdoClient,
+        AzureDevOpsClientFactory azdoClientFactory,
         TemporaryDirectory dir,
         IAzureDevOpsTokenProvider azdoTokenProvider,
         bool isCI)
@@ -144,7 +144,7 @@ public class TestParameters : IDisposable
         GitHubToken = gitHubToken;
         PcsApi = pcsApi;
         GitHubApi = gitHubApi;
-        AzDoClient = azdoClient;
+        AzDoClientFactory = azdoClientFactory;
         IsCI = isCI;
     }
 
@@ -166,7 +166,7 @@ public class TestParameters : IDisposable
 
     public Octokit.GitHubClient GitHubApi { get; }
 
-    public AzureDevOpsClient AzDoClient { get; }
+    public AzureDevOpsClientFactory AzDoClientFactory { get; }
 
     public int AzureDevOpsBuildDefinitionId { get; } = 6;
 

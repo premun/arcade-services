@@ -135,16 +135,16 @@ public class AbuseRateLimitFakeResponse : IResponse
 internal class TestGitHubClient : GitHubClient
 {
     private IGitHubClient _client;
+
     public void SetGitHubClientObject(IGitHubClient value)
     {
         _client = value;
     }
 
-    public override IGitHubClient GetClient(string owner, string repo) => _client;
-    public override IGitHubClient GetClient(string repoUri) => _client;
+    internal override IGitHubClient Client => _client;
 
     public TestGitHubClient(string gitExecutable, string accessToken, ILogger logger, string temporaryRepositoryPath, IMemoryCache cache)
-        : base(new ResolvedTokenProvider(accessToken), new ProcessManager(logger, gitExecutable), logger, temporaryRepositoryPath, cache)
+        : base("https://github.com/dotnet/dotnet", new ResolvedTokenProvider(accessToken), new ProcessManager(logger, gitExecutable), logger, temporaryRepositoryPath, cache)
     {
     }
 }
