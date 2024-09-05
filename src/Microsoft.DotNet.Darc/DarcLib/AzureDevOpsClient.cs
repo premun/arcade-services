@@ -61,16 +61,12 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
     private readonly ILogger _logger;
     private readonly JsonSerializerSettings _serializerSettings;
 
-    public AzureDevOpsClient(string repoUri, IAzureDevOpsTokenProvider tokenProvider, IProcessManager processManager, ILogger logger)
-        : this(repoUri, tokenProvider, processManager, logger, null)
-    {
-    }
-
-    public AzureDevOpsClient(string repoUri, IAzureDevOpsTokenProvider tokenProvider, IProcessManager processManager, ILogger logger, string temporaryRepositoryPath)
+    public AzureDevOpsClient(string accountName, string projectName, string repoName, IAzureDevOpsTokenProvider tokenProvider, IProcessManager processManager, ILogger logger, string temporaryRepositoryPath)
         : base(tokenProvider, processManager, temporaryRepositoryPath, null, logger)
     {
-        _repoUri = repoUri;
-        (_accountName, _projectName, _repoName) = ParseRepoUri(repoUri);
+        _accountName = accountName;
+        _projectName = projectName;
+        _repoName = repoName;
         _tokenProvider = tokenProvider;
         _logger = logger;
         _serializerSettings = new JsonSerializerSettings
@@ -83,37 +79,15 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
     public bool AllowRetries { get; set; } = true;
 
     /// <summary>
-    /// Retrieve the contents of a text file in a repo on a specific branch
-    /// </summary>
-    /// <param name="filePath">Path to file within the repo</param>
-    /// <param name="repoUri">Repository url</param>
-    /// <param name="branch">Branch or commit</param>
-    /// <returns>Content of file</returns>
-    public Task<string> GetFileContentsAsync(string filePath, string repoUri, string branch)
-    {
-        (string accountName, string projectName, string repoName) = ParseRepoUri(repoUri);
-
-        return GetFileContentsAsync(accountName, projectName, repoName, filePath, branch);
-    }
-
-    /// <summary>
     ///     Retrieve the contents of a text file in a repo on a specific branch
     /// </summary>
-    /// <param name="accountName">Azure DevOps account</param>
-    /// <param name="projectName">Azure DevOps project</param>
-    /// <param name="repoName">Azure DevOps repo</param>
     /// <param name="filePath">Path to file</param>
     /// <param name="branchOrCommit">Branch</param>
     /// <returns>Contents of file as string</returns>
-    private async Task<string> GetFileContentsAsync(
-        string accountName,
-        string projectName,
-        string repoName,
-        string filePath,
-        string branchOrCommit)
+    private async Task<string> GetFileContentsAsync(string filePath, string branchOrCommit)
     {
         _logger.LogInformation(
-            $"Getting the contents of file '{filePath}' from repo '{accountName}/{projectName}/{repoName}' in branch/commit '{branchOrCommit}'...");
+            $"Getting the contents of file '{filePath}' from repo '{_accountName}/{_projectName}/{_repoName}' in branch/commit '{branchOrCommit}'...");
 
         // The AzDO REST API currently does not transparently handle commits vs. branches vs. tags.
         // You really need to know whether you're talking about a commit or branch or tag
@@ -126,9 +100,7 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
             {
                 JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
                     HttpMethod.Get,
-                    accountName,
-                    projectName,
-                    $"_apis/git/repositories/{repoName}/items?path={filePath}&versionType={versionType}&version={branchOrCommit}&includeContent=true",
+                    $"_apis/git/repositories/{_repoName}/items?path={filePath}&versionType={versionType}&version={branchOrCommit}&includeContent=true",
                     _logger,
                     // Don't log the failure so users don't get confused by 404 messages popping up in expected circumstances.
                     logFailure: false);
@@ -141,7 +113,7 @@ public class AzureDevOpsClient : RemoteRepoBase, IRemoteGitRepo, IAzureDevOpsCli
             }
         }
 
-        throw new DependencyFileNotFoundException(filePath, $"{repoName}", branchOrCommit, lastException);
+        throw new DependencyFileNotFoundException(filePath, _repoName, branchOrCommit, lastException);
     }
 
     /// <summary>
@@ -577,7 +549,7 @@ This pull request has not been merged because Maestro++ is waiting on the follow
             {
                 if (!DependencyFileManager.DependencyFiles.Contains(item.Path))
                 {
-                    string fileContent = await GetFileContentsAsync(item.Path, _repoUri, commit);
+                    string fileContent = await GetFileContentsAsync(item.Path, commit);
                     var gitCommit = new GitFile(item.Path.TrimStart('/'), fileContent);
                     files.Add(gitCommit);
                 }
@@ -685,7 +657,7 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     {
         (string accountName, string projectName, _, int id) = ParsePullRequestUri(pullRequestUrl);
 
-        string projectId = await GetProjectIdAsync(accountName, projectName);
+        string projectId = await GetProjectIdAsync();
 
         string artifactId = $"vstfs:///CodeReview/CodeReviewId/{projectId}/{id}";
 
@@ -818,6 +790,37 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     }
 
     /// <summary>
+    ///     Execute a command on the remote repository.
+    /// </summary>
+    /// <param name="method">Http method</param>
+    /// <param name="requestPath">Path for request</param>
+    /// <param name="logger">Logger</param>
+    /// <param name="body">Optional body if <paramref name="method"/> is Put or Post</param>
+    /// <param name="versionOverride">API version override</param>
+    /// <param name="baseAddressSubpath">[baseAddressSubPath]dev.azure.com subdomain to make the request</param>
+    /// <param name="retryCount">Maximum number of tries to attempt the API request</param>
+    /// <returns>Http response</returns>
+    public Task<JObject> ExecuteAzureDevOpsAPIRequestAsync(
+        HttpMethod method,
+        string requestPath,
+        ILogger logger,
+        string body = null,
+        string versionOverride = null,
+        bool logFailure = true,
+        string baseAddressSubpath = null,
+        int retryCount = 15) => ExecuteAzureDevOpsAPIRequestAsync(
+            method,
+            _accountName,
+            _projectName,
+            requestPath,
+            logger,
+            body,
+            versionOverride,
+            logFailure,
+            baseAddressSubpath,
+            retryCount);
+
+    /// <summary>
     ///     Ensure that the input string ends with 'shouldEndWith' char. 
     ///     Returns null if input parameter is null.
     /// </summary>
@@ -912,16 +915,14 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <summary>
     ///   Returns the project ID for a combination of Azure DevOps account and project name
     /// </summary>
-    /// <param name="accountName">Azure DevOps account</param>
-    /// <param name="projectName">Azure DevOps project to get the ID for</param>
     /// <returns>Project Id</returns>
-    public async Task<string> GetProjectIdAsync(string accountName, string projectName)
+    public async Task<string> GetProjectIdAsync()
     {
         JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Get,
-            accountName,
-            "",
-            $"_apis/projects/{projectName}",
+            _accountName,
+            string.Empty,
+            $"_apis/projects/{_projectName}",
             _logger,
             versionOverride: "5.0");
         return content["id"].ToString();
@@ -951,14 +952,12 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     ///     Commit or update a set of files to a repo
     /// </summary>
     /// <param name="filesToCommit">Files to comit</param>
-    /// <param name="repoUri">Remote repository URI</param>
     /// <param name="branch">Branch to push to</param>
     /// <param name="commitMessage">Commit message</param>
-    /// <returns></returns>
-    public async Task CommitFilesAsync(List<GitFile> filesToCommit, string repoUri, string branch, string commitMessage)
+    public async Task CommitFilesAsync(List<GitFile> filesToCommit, string branch, string commitMessage)
         => await CommitFilesAsync(
             filesToCommit,
-            repoUri,
+            _repoUri,
             branch,
             commitMessage,
             _logger,
@@ -976,12 +975,10 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     ///     - Type: Single Build
     ///     - Version: Specific
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="projectName">Project name</param>
     /// <param name="releaseDefinition">Release definition to be updated</param>
     /// <param name="build">Build which should be added as source of the release definition.</param>
     /// <returns>AzureDevOpsReleaseDefinition</returns>
-    public async Task<AzureDevOpsReleaseDefinition> AdjustReleasePipelineArtifactSourceAsync(string accountName, string projectName, AzureDevOpsReleaseDefinition releaseDefinition, AzureDevOpsBuild build)
+    public async Task<AzureDevOpsReleaseDefinition> AdjustReleasePipelineArtifactSourceAsync(AzureDevOpsReleaseDefinition releaseDefinition, AzureDevOpsBuild build)
     {
         if (releaseDefinition.Artifacts == null || releaseDefinition.Artifacts.Length == 0)
         {
@@ -1068,8 +1065,6 @@ This pull request has not been merged because Maestro++ is waiting on the follow
 
         JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Put,
-            accountName,
-            projectName,
             $"_apis/release/definitions/",
             _logger,
             body,
@@ -1083,18 +1078,14 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     ///     Trigger a new release using the release definition informed. No change is performed
     ///     on the release definition - it is used as is.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="projectName">Project name</param>
     /// <param name="releaseDefinition">Release definition to be updated</param>
     /// <returns>Id of the started release</returns>
-    public async Task<int> StartNewReleaseAsync(string accountName, string projectName, AzureDevOpsReleaseDefinition releaseDefinition, int barBuildId)
+    public async Task<int> StartNewReleaseAsync(AzureDevOpsReleaseDefinition releaseDefinition, int barBuildId)
     {
         var body = $"{{ \"definitionId\": {releaseDefinition.Id}, \"variables\": {{ \"BARBuildId\": {{ \"value\": \"{barBuildId}\" }} }} }}";
 
         JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Post,
-            accountName,
-            projectName,
             $"_apis/release/releases/",
             _logger,
             body,
@@ -1107,15 +1098,11 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <summary>
     ///     Queue a new build on the specified build definition with the given queue time variables.
     /// </summary>
-    /// <param name="accountName">Account where the project is hosted.</param>
-    /// <param name="projectName">Project where the build definition is.</param>
     /// <param name="azdoDefinitionId">ID of the build definition where a build should be queued.</param>
     /// <param name="queueTimeVariables">Queue time variables as a Dictionary of (variable name, value).</param>
     /// <param name="templateParameters">Template parameters as a Dictionary of (variable name, value).</param>
     /// <param name="pipelineResources">Pipeline resources as a Dictionary of (pipeline resource name, build number).</param>
     public async Task<int> StartNewBuildAsync(
-        string accountName,
-        string projectName,
         int azdoDefinitionId,
         string sourceBranch,
         string sourceVersion,
@@ -1151,8 +1138,8 @@ This pull request has not been merged because Maestro++ is waiting on the follow
 
         JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Post,
-            accountName,
-            projectName,
+            _accountName,
+            _projectName,
             $"_apis/pipelines/{azdoDefinitionId}/runs",
             _logger,
             bodyAsString,
@@ -1185,13 +1172,12 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <summary>
     ///   Gets all Artifact feeds in an Azure DevOps account.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
     /// <returns>List of Azure DevOps feeds in the account</returns>
-    public async Task<List<AzureDevOpsFeed>> GetFeedsAsync(string accountName)
+    public async Task<List<AzureDevOpsFeed>> GetFeedsAsync()
     {
         JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Get,
-            accountName,
+            _accountName,
             null,
             $"_apis/packaging/feeds",
             _logger,
@@ -1199,22 +1185,18 @@ This pull request has not been merged because Maestro++ is waiting on the follow
             baseAddressSubpath: "feeds.");
 
         var list = ((JArray)content["value"]).ToObject<List<AzureDevOpsFeed>>();
-        list.ForEach(f => f.Account = accountName);
+        list.ForEach(f => f.Account = _accountName);
         return list;
     }
 
     /// <summary>
     ///   Gets the list of Build Artifacts names.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="projectName">Project name</param>
     /// <returns>List of Azure DevOps build artifacts names.</returns>
-    public async Task<List<AzureDevOpsBuildArtifact>> GetBuildArtifactsAsync(string accountName, string projectName, int azureDevOpsBuildId, int maxRetries = 15)
+    public async Task<List<AzureDevOpsBuildArtifact>> GetBuildArtifactsAsync(int azureDevOpsBuildId, int maxRetries = 15)
     {
         JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Get,
-            accountName,
-            projectName,
             $"_apis/build/builds/{azureDevOpsBuildId}/artifacts",
             _logger,
             versionOverride: "5.0",
@@ -1226,49 +1208,42 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <summary>
     ///   Gets all Artifact feeds along with their packages in an Azure DevOps account.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name.</param>
     /// <returns>List of Azure DevOps feeds in the account.</returns>
-    public async Task<List<AzureDevOpsFeed>> GetFeedsAndPackagesAsync(string accountName)
+    public async Task<List<AzureDevOpsFeed>> GetFeedsAndPackagesAsync()
     {
-        var feeds = await GetFeedsAsync(accountName);
-        feeds.ForEach(async feed => feed.Packages = await GetPackagesForFeedAsync(accountName, feed.Project?.Name, feed.Name));
+        var feeds = await GetFeedsAsync();
+        feeds.ForEach(async feed => feed.Packages = await GetPackagesForFeedAsync(feed.Project?.Name, feed.Name));
         return feeds;
     }
 
     /// <summary>
     ///   Gets a specified Artifact feed in an Azure DevOps account.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="project">Azure DevOps project where the feed is hosted</param>
     /// <param name="feedIdentifier">ID or name of the feed</param>
     /// <returns>List of Azure DevOps feeds in the account</returns>
-    public async Task<AzureDevOpsFeed> GetFeedAsync(string accountName, string project, string feedIdentifier)
+    public async Task<AzureDevOpsFeed> GetFeedAsync(string feedIdentifier)
     {
         JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Get,
-            accountName,
-            project,
             $"_apis/packaging/feeds/{feedIdentifier}",
             _logger,
             versionOverride: "5.1-preview.1",
             baseAddressSubpath: "feeds.");
 
         AzureDevOpsFeed feed = content.ToObject<AzureDevOpsFeed>();
-        feed.Account = accountName;
+        feed.Account = _accountName;
         return feed;
     }
 
     /// <summary>
     ///   Gets a specified Artifact feed with their pacckages in an Azure DevOps account.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name.</param>
-    /// <param name="project">Azure DevOps project that the feed is hosted in</param>
     /// <param name="feedIdentifier">ID or name of the feed.</param>
     /// <returns>List of Azure DevOps feeds in the account.</returns>
-    public async Task<AzureDevOpsFeed> GetFeedAndPackagesAsync(string accountName, string project, string feedIdentifier)
+    public async Task<AzureDevOpsFeed> GetFeedAndPackagesAsync(string feedIdentifier)
     {
-        var feed = await GetFeedAsync(accountName, project, feedIdentifier);
-        feed.Packages = await GetPackagesForFeedAsync(accountName, project, feedIdentifier);
+        var feed = await GetFeedAsync(feedIdentifier);
+        feed.Packages = await GetPackagesForFeedAsync(feedIdentifier, feed.Project.Name);
 
         return feed;
     }
@@ -1276,15 +1251,14 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <summary>
     /// Gets all packages in a given Azure DevOps feed
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
     /// <param name="project">Project that the feed was created in</param>
     /// <param name="feedIdentifier">Name or id of the feed</param>
     /// <returns>List of packages in the feed</returns>
-    public async Task<List<AzureDevOpsPackage>> GetPackagesForFeedAsync(string accountName, string project, string feedIdentifier)
+    public async Task<List<AzureDevOpsPackage>> GetPackagesForFeedAsync(string feedIdentifier, string project)
     {
         JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Get,
-            accountName,
+            _accountName,
             project,
             $"_apis/packaging/feeds/{feedIdentifier}/packages?includeAllVersions=true&includeDeleted=true",
             _logger,
@@ -1297,16 +1271,12 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <summary>
     ///   Deletes an Azure Artifacts feed and all of its packages
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="project">Project that the feed was created in</param>
     /// <param name="feedIdentifier">Name or id of the feed</param>
     /// <returns>Async task</returns>
-    public async Task DeleteFeedAsync(string accountName, string project, string feedIdentifier)
+    public async Task DeleteFeedAsync(string feedIdentifier)
     {
         await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Delete,
-            accountName,
-            project,
             $"_apis/packaging/feeds/{feedIdentifier}",
             _logger,
             versionOverride: "5.1-preview.1",
@@ -1316,18 +1286,14 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <summary>
     ///   Deletes a NuGet package version from a feed.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="project">Project that the feed was created in</param>
     /// <param name="feedIdentifier">Name or id of the feed</param>
     /// <param name="packageName">Name of the package</param>
     /// <param name="version">Version to delete</param>
     /// <returns>Async task</returns>
-    public async Task DeleteNuGetPackageVersionFromFeedAsync(string accountName, string project, string feedIdentifier, string packageName, string version)
+    public async Task DeleteNuGetPackageVersionFromFeedAsync(string feedIdentifier, string packageName, string version)
     {
         await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Delete,
-            accountName,
-            project,
             $"_apis/packaging/feeds/{feedIdentifier}/nuget/packages/{packageName}/versions/{version}",
             _logger,
             versionOverride: "5.1-preview.1",
@@ -1337,18 +1303,14 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <summary>
     ///   Fetches a list of last run AzDO builds for a given build definition.
     /// </summary>
-    /// <param name="account">Azure DevOps account name</param>
-    /// <param name="project">Project name</param>
     /// <param name="definitionId">Id of the pipeline (build definition)</param>
     /// <param name="branch">Filter by branch</param>
     /// <param name="count">Number of builds to retrieve</param>
     /// <param name="status">Filter by status</param>
     /// <returns>AzureDevOpsBuild</returns>
-    public async Task<JObject> GetBuildsAsync(string account, string project, int definitionId, string branch, int count, string status)
+    public async Task<JObject> GetBuildsAsync(int definitionId, string branch, int count, string status)
         => await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Get,
-            account,
-            project,
             $"_apis/build/builds?definitions={definitionId}&branchName={branch}&statusFilter={status}&$top={count}",
             _logger,
             versionOverride: "5.0");
@@ -1356,16 +1318,12 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <summary>
     ///   Fetches an specific AzDO build based on its ID.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="projectName">Project name</param>
     /// <param name="buildId">Id of the build to be retrieved</param>
     /// <returns>AzureDevOpsBuild</returns>
-    public async Task<AzureDevOpsBuild> GetBuildAsync(string accountName, string projectName, long buildId)
+    public async Task<AzureDevOpsBuild> GetBuildAsync(long buildId)
     {
         JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Get,
-            accountName,
-            projectName,
             $"_apis/build/builds/{buildId}",
             _logger,
             versionOverride: "5.0");
@@ -1376,16 +1334,12 @@ This pull request has not been merged because Maestro++ is waiting on the follow
     /// <summary>
     ///     Fetches an specific AzDO release definition based on its ID.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="projectName">Project name</param>
     /// <param name="releaseDefinitionId">Id of the release definition to be retrieved</param>
     /// <returns>AzureDevOpsReleaseDefinition</returns>
-    public async Task<AzureDevOpsReleaseDefinition> GetReleaseDefinitionAsync(string accountName, string projectName, long releaseDefinitionId)
+    public async Task<AzureDevOpsReleaseDefinition> GetReleaseDefinitionAsync(long releaseDefinitionId)
     {
         JObject content = await ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Get,
-            accountName,
-            projectName,
             $"_apis/release/definitions/{releaseDefinitionId}",
             _logger,
             versionOverride: "5.0",

@@ -10,15 +10,23 @@ namespace Microsoft.DotNet.DarcLib;
 
 public interface IAzureDevOpsClientFactory
 {
-    IAzureDevOpsClient GetAzureDevOpsClient(string repoUri, string? temporaryRepositoryPath = null);
+    IAzureDevOpsClient CreateAzureDevOpsClient(string repoUri, string? temporaryRepositoryPath = null);
+
+    IAzureDevOpsClient CreateAzureDevOpsClient(string accountName, string projectName, string repoName, string? temporaryRepositoryPath = null);
 }
 
 public class AzureDevOpsClientFactory(IAzureDevOpsTokenProvider tokenProvider, IProcessManager processManager, ILogger logger, string? temporaryRepositoryPath = null) : IAzureDevOpsClientFactory
 {
     private readonly string? _temporaryRepositoryPath = temporaryRepositoryPath;
 
-    public IAzureDevOpsClient GetAzureDevOpsClient(string repoUri, string? temporaryRepositoryPath = null)
+    public IAzureDevOpsClient CreateAzureDevOpsClient(string repoUri, string? temporaryRepositoryPath = null)
     {
-        return new AzureDevOpsClient(repoUri, tokenProvider, processManager, logger, temporaryRepositoryPath ?? _temporaryRepositoryPath);
+        (string accountName, string projectName, string repoName) = AzureDevOpsClient.ParseRepoUri(repoUri);
+        return CreateAzureDevOpsClient(accountName, projectName, repoName, temporaryRepositoryPath);
+    }
+
+    public IAzureDevOpsClient CreateAzureDevOpsClient(string accountName, string projectName, string repoName, string? temporaryRepositoryPath = null)
+    {
+        return new AzureDevOpsClient(accountName, projectName, repoName, tokenProvider, processManager, logger, temporaryRepositoryPath ?? _temporaryRepositoryPath);
     }
 }

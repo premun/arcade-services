@@ -33,7 +33,7 @@ internal abstract class ScenarioTestBase
 
     protected Octokit.GitHubClient GitHubApi => _parameters.GitHubApi;
 
-    protected IAzureDevOpsClient GetAzDoClient(string repoUri) => _parameters.AzDoClientFactory.GetAzureDevOpsClient(repoUri);
+    protected IAzureDevOpsClient GetAzDoClient(string repoUri) => _parameters.AzDoClientFactory.CreateAzureDevOpsClient(repoUri);
 
     public void SetTestParameters(TestParameters parameters)
     {

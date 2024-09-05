@@ -27,12 +27,12 @@ namespace FeedCleanerService;
 public sealed class FeedCleanerService : IFeedCleanerService, IServiceImplementation
 {
     public FeedCleanerService(
-        IAzureDevOpsClient azureDevOpsClient,
+        IAzureDevOpsClientFactory azureDevOpsClientFactory,
         ILogger<FeedCleanerService> logger,
         BuildAssetRegistryContext context,
         IOptions<FeedCleanerOptions> options)
     {
-        _azureDevOpsClient = azureDevOpsClient;
+        _azureDevOpsClientFactory = azureDevOpsClientFactory;
         Logger = logger;
         Context = context;
         _httpClient = new HttpClient(new HttpClientHandler() { CheckCertificateRevocationList = true });
@@ -45,7 +45,7 @@ public sealed class FeedCleanerService : IFeedCleanerService, IServiceImplementa
     public FeedCleanerOptions Options => _options.Value;
 
     private readonly HttpClient _httpClient;
-    private readonly IAzureDevOpsClient _azureDevOpsClient;
+    private readonly IAzureDevOpsClientFactory _azureDevOpsClientFactory;
     private readonly IOptions<FeedCleanerOptions> _options;
 
     public Task<TimeSpan> RunAsync(CancellationToken cancellationToken)
@@ -61,51 +61,52 @@ public sealed class FeedCleanerService : IFeedCleanerService, IServiceImplementa
     [CronSchedule("0 0 2 1/1 * ? *", TimeZones.PST)]
     public async Task CleanManagedFeedsAsync()
     {
-        if (Options.Enabled)
+        if (!Options.Enabled)
         {
-            Dictionary<string, Dictionary<string, HashSet<string>>> packagesInReleaseFeeds =
-                await GetPackagesForReleaseFeedsAsync();
+            Logger.LogInformation("Feed cleaner service is disabled in this environment");
+            return;
+        }
 
-            foreach (var azdoAccount in Options.AzdoAccounts)
+        Dictionary<string, Dictionary<string, HashSet<string>>> packagesInReleaseFeeds =
+            await GetPackagesForReleaseFeedsAsync();
+
+        foreach (var azdoAccount in Options.AzdoAccounts)
+        {
+            var azureDevOpsClient = _azureDevOpsClientFactory.GetAzureDevOpsClient();
+
+            List<AzureDevOpsFeed> allFeeds;
+            try
             {
-                List<AzureDevOpsFeed> allFeeds;
+                allFeeds = await azureDevOpsClient.GetFeedsAsync(azdoAccount);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, $"Failed to get feeds for account {azdoAccount}");
+                continue;
+            }
+            IEnumerable<AzureDevOpsFeed> managedFeeds = allFeeds.Where(f => Regex.IsMatch(f.Name, FeedConstants.MaestroManagedFeedNamePattern));
+
+            foreach (var feed in managedFeeds)
+            {
                 try
                 {
-                    allFeeds = await _azureDevOpsClient.GetFeedsAsync(azdoAccount);
+                    await PopulatePackagesForFeedAsync(feed);
+                    foreach (var package in feed.Packages)
+                    {
+                        HashSet<string> updatedVersions =
+                            await UpdateReleasedVersionsForPackageAsync(feed, package, packagesInReleaseFeeds);
+
+                        await DeletePackageVersionsFromFeedAsync(feed, package.Name, updatedVersions);
+                    }
+                    // We may have deleted all packages in the previous operation, if so, we should delete the feed,
+                    // refresh the packages in the feed to check this.
+                    await PopulatePackagesForFeedAsync(feed);
                 }
                 catch (Exception ex)
                 {
-                    Logger.LogError(ex, $"Failed to get feeds for account {azdoAccount}");
-                    continue;
-                }
-                IEnumerable<AzureDevOpsFeed> managedFeeds = allFeeds.Where(f => Regex.IsMatch(f.Name, FeedConstants.MaestroManagedFeedNamePattern));
-
-                foreach (var feed in managedFeeds)
-                {
-                    try
-                    {
-                        await PopulatePackagesForFeedAsync(feed);
-                        foreach (var package in feed.Packages)
-                        {
-                            HashSet<string> updatedVersions =
-                                await UpdateReleasedVersionsForPackageAsync(feed, package, packagesInReleaseFeeds);
-
-                            await DeletePackageVersionsFromFeedAsync(feed, package.Name, updatedVersions);
-                        }
-                        // We may have deleted all packages in the previous operation, if so, we should delete the feed,
-                        // refresh the packages in the feed to check this.
-                        await PopulatePackagesForFeedAsync(feed);
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.LogError(ex, $"Something failed while trying to update the released packages in feed {feed.Name}");
-                    } 
+                    Logger.LogError(ex, $"Something failed while trying to update the released packages in feed {feed.Name}");
                 }
             }
-        }
-        else
-        {
-            Logger.LogInformation("Feed cleaner service is disabled in this environment");
         }
     }
 
@@ -151,7 +152,8 @@ public sealed class FeedCleanerService : IFeedCleanerService, IServiceImplementa
     private async Task<Dictionary<string, HashSet<string>>> GetPackageVersionsForFeedAsync(string account, string project, string feedName)
     {
         var packagesWithVersions = new Dictionary<string, HashSet<string>>();
-        List<AzureDevOpsPackage> packagesInFeed = await _azureDevOpsClient.GetPackagesForFeedAsync(account, project, feedName);
+        var azureDevOpsClient = _azureDevOpsClientFactory.GetAzureDevOpsClient();
+        List<AzureDevOpsPackage> packagesInFeed = await azureDevOpsClient.GetPackagesForFeedAsync(account, project, feedName);
         foreach (AzureDevOpsPackage package in packagesInFeed)
         {
             packagesWithVersions.Add(package.Name, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
@@ -253,17 +255,15 @@ public sealed class FeedCleanerService : IFeedCleanerService, IServiceImplementa
     /// <returns></returns>
     private async Task DeletePackageVersionsFromFeedAsync(AzureDevOpsFeed feed, string packageName, HashSet<string> versionsToDelete)
     {
+        var azdoClient = _azureDevOpsClientFactory.CreateAzureDevOpsClient(feed.Account, feed.Project.Name, "dotnet");
+
         foreach (string version in versionsToDelete)
         {
             try
             {
                 Logger.LogInformation($"Deleting package {packageName}.{version} from feed {feed.Name}");
 
-                await _azureDevOpsClient.DeleteNuGetPackageVersionFromFeedAsync(feed.Account,
-                    feed.Project?.Name,
-                    feed.Name,
-                    packageName,
-                    version);
+                await azdoClient.DeleteNuGetPackageVersionFromFeedAsync(feed.Name, packageName, version);
             }
             catch (HttpRequestException e)
             {
@@ -329,6 +329,7 @@ public sealed class FeedCleanerService : IFeedCleanerService, IServiceImplementa
     /// <returns></returns>
     private async Task PopulatePackagesForFeedAsync(AzureDevOpsFeed feed)
     {
-        feed.Packages = await _azureDevOpsClient.GetPackagesForFeedAsync(feed.Account, feed.Project?.Name, feed.Name);
+        var azdoClient = _azureDevOpsClientFactory.CreateAzureDevOpsClient(feed.Account, feed.Project.Name, "dotnet");
+        feed.Packages = await azdoClient.GetPackagesForFeedAsync(feed.Name);
     }
 }

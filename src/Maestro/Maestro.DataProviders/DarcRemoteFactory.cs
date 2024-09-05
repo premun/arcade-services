@@ -84,7 +84,7 @@ public class DarcRemoteFactory : IRemoteFactory
                     logger,
                     _cache.Cache),
 
-            GitRepoType.AzureDevOps => _azdoClientFactory.GetAzureDevOpsClient(repoUrl),
+            GitRepoType.AzureDevOps => _azdoClientFactory.CreateAzureDevOpsClient(repoUrl),
 
             _ => throw new NotImplementedException($"Unknown repo url type {normalizedUrl}"),
         };

@@ -21,12 +21,10 @@ public interface IAzureDevOpsClient : IRemoteGitRepo
     ///     - Type: Single Build
     ///     - Version: Specific
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="projectName">Project name</param>
     /// <param name="releaseDefinition">Release definition to be updated</param>
     /// <param name="build">Build which should be added as source of the release definition.</param>
     /// <returns>AzureDevOpsReleaseDefinition</returns>
-    Task<AzureDevOpsReleaseDefinition> AdjustReleasePipelineArtifactSourceAsync(string accountName, string projectName, AzureDevOpsReleaseDefinition releaseDefinition, AzureDevOpsBuild build);
+    Task<AzureDevOpsReleaseDefinition> AdjustReleasePipelineArtifactSourceAsync(AzureDevOpsReleaseDefinition releaseDefinition, AzureDevOpsBuild build);
 
     /// <summary>
     ///     Execute a command on the remote repository.
@@ -56,31 +54,25 @@ public interface IAzureDevOpsClient : IRemoteGitRepo
     /// <summary>
     ///   Deletes an Azure Artifacts feed and all of its packages
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="project">Project that the feed was created in</param>
     /// <param name="feedIdentifier">Name or id of the feed</param>
     /// <returns>Async task</returns>
-    Task DeleteFeedAsync(string accountName, string project, string feedIdentifier);
+    Task DeleteFeedAsync(string feedIdentifier);
 
     /// <summary>
     ///   Deletes a NuGet package version from a feed.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="project">Project that the feed was created in</param>
     /// <param name="feedIdentifier">Name or id of the feed</param>
     /// <param name="packageName">Name of the package</param>
     /// <param name="version">Version to delete</param>
     /// <returns>Async task</returns>
-    Task DeleteNuGetPackageVersionFromFeedAsync(string accountName, string project, string feedIdentifier, string packageName, string version);
+    Task DeleteNuGetPackageVersionFromFeedAsync(string feedIdentifier, string packageName, string version);
 
     /// <summary>
     ///   Fetches an specific AzDO build based on its ID.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="projectName">Project name</param>
     /// <param name="buildId">Id of the build to be retrieved</param>
     /// <returns>AzureDevOpsBuild</returns>
-    Task<AzureDevOpsBuild> GetBuildAsync(string accountName, string projectName, long buildId);
+    Task<AzureDevOpsBuild> GetBuildAsync(long buildId);
 
     /// <summary>
     ///   Fetches a list of last run AzDO builds for a given build definition.
@@ -96,89 +88,70 @@ public interface IAzureDevOpsClient : IRemoteGitRepo
     /// <summary>
     ///   Fetches artifacts belonging to a given AzDO build.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="projectName">Project name</param>
     /// <param name="buildId">Id of the build to be retrieved</param>
     /// <returns>List of build artifacts</returns>
-    Task<List<AzureDevOpsBuildArtifact>> GetBuildArtifactsAsync(string accountName, string projectName, int buildId, int maxRetries = 15);
+    Task<List<AzureDevOpsBuildArtifact>> GetBuildArtifactsAsync(int buildId, int maxRetries = 15);
 
     /// <summary>
     ///   Gets a specified Artifact feed with their pacckages in an Azure DevOps account.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name.</param>
-    /// <param name="project">Azure DevOps project that the feed is hosted in</param>
     /// <param name="feedIdentifier">ID or name of the feed.</param>
     /// <returns>List of Azure DevOps feeds in the account.</returns>
-    Task<AzureDevOpsFeed> GetFeedAndPackagesAsync(string accountName, string project, string feedIdentifier);
+    Task<AzureDevOpsFeed> GetFeedAndPackagesAsync(string feedIdentifier);
 
     /// <summary>
     ///   Gets a specified Artifact feed in an Azure DevOps account.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="project">Azure DevOps project where the feed is hosted</param>
     /// <param name="feedIdentifier">ID or name of the feed</param>
     /// <returns>List of Azure DevOps feeds in the account</returns>
-    Task<AzureDevOpsFeed> GetFeedAsync(string accountName, string project, string feedIdentifier);
+    Task<AzureDevOpsFeed> GetFeedAsync(string feedIdentifier);
 
     /// <summary>
     ///   Gets all Artifact feeds along with their packages in an Azure DevOps account.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name.</param>
     /// <returns>List of Azure DevOps feeds in the account.</returns>
-    Task<List<AzureDevOpsFeed>> GetFeedsAndPackagesAsync(string accountName);
+    Task<List<AzureDevOpsFeed>> GetFeedsAndPackagesAsync();
 
     /// <summary>
     ///   Gets all Artifact feeds in an Azure DevOps account.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
     /// <returns>List of Azure DevOps feeds in the account</returns>
-    Task<List<AzureDevOpsFeed>> GetFeedsAsync(string accountName);
+    Task<List<AzureDevOpsFeed>> GetFeedsAsync();
 
     /// <summary>
     ///   Gets all Artifact feeds along with their packages in an Azure DevOps account.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name.</param>
     /// <returns>List of Azure DevOps feeds in the account.</returns>
-    Task<List<AzureDevOpsPackage>> GetPackagesForFeedAsync(string accountName, string project, string feedIdentifier);
+    Task<List<AzureDevOpsPackage>> GetPackagesForFeedAsync(string feedIdentifier);
 
     /// <summary>
     ///   Returns the project ID for a combination of Azure DevOps account and project name
     /// </summary>
-    /// <param name="accountName">Azure DevOps account</param>
-    /// <param name="projectName">Azure DevOps project to get the ID for</param>
     /// <returns>Project Id</returns>
-    Task<string> GetProjectIdAsync(string accountName, string projectName);
+    Task<string> GetProjectIdAsync();
 
     /// <summary>
     ///   Return the description of the release with ID informed.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="projectName">Project name</param>
     /// <param name="releaseId">ID of the release that should be looked up for</param>
     /// <returns>AzureDevOpsRelease</returns>
-    Task<AzureDevOpsRelease> GetReleaseAsync(string accountName, string projectName, int releaseId);
+    Task<AzureDevOpsRelease> GetReleaseAsync(int releaseId);
 
     /// <summary>
     ///   Fetches an specific AzDO release definition based on its ID.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="projectName">Project name</param>
     /// <param name="releaseDefinitionId">Id of the release definition to be retrieved</param>
     /// <returns>AzureDevOpsReleaseDefinition</returns>
-    Task<AzureDevOpsReleaseDefinition> GetReleaseDefinitionAsync(string accountName, string projectName, long releaseDefinitionId);
+    Task<AzureDevOpsReleaseDefinition> GetReleaseDefinitionAsync(long releaseDefinitionId);
 
     /// <summary>
     ///   Queue a new build on the specified build definition with the given queue time variables.
     /// </summary>
-    /// <param name="accountName">Account where the project is hosted.</param>
-    /// <param name="projectName">Project where the build definition is.</param>
     /// <param name="buildDefinitionId">ID of the build definition where a build should be queued.</param>
     /// <param name="queueTimeVariables">Queue time variables as a Dictionary of (variable name, value).</param>
     /// <param name="templateParameters">Template parameters as a Dictionary of (variable name, value).</param>
     /// <param name="pipelineResources">Pipeline resources as a Dictionary of (pipeline resource name, build number).</param>
     Task<int> StartNewBuildAsync(
-        string accountName,
-        string projectName,
         int buildDefinitionId,
         string sourceBranch,
         string sourceVersion,
@@ -190,9 +163,7 @@ public interface IAzureDevOpsClient : IRemoteGitRepo
     ///   Trigger a new release using the release definition informed. No change is performed
     ///   on the release definition - it is used as is.
     /// </summary>
-    /// <param name="accountName">Azure DevOps account name</param>
-    /// <param name="projectName">Project name</param>
     /// <param name="releaseDefinition">Release definition to be updated</param>
     /// <returns>Id of the started release</returns>
-    Task<int> StartNewReleaseAsync(string accountName, string projectName, AzureDevOpsReleaseDefinition releaseDefinition, int barBuildId);
+    Task<int> StartNewReleaseAsync(AzureDevOpsReleaseDefinition releaseDefinition, int barBuildId);
 }
