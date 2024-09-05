@@ -13,10 +13,12 @@ public interface IAzureDevOpsClientFactory
     IAzureDevOpsClient GetAzureDevOpsClient(string repoUri, string? temporaryRepositoryPath = null);
 }
 
-public class AzureDevOpsClientFactory(IAzureDevOpsTokenProvider tokenProvider, IProcessManager processManager, ILogger logger) : IAzureDevOpsClientFactory
+public class AzureDevOpsClientFactory(IAzureDevOpsTokenProvider tokenProvider, IProcessManager processManager, ILogger logger, string? temporaryRepositoryPath = null) : IAzureDevOpsClientFactory
 {
-    public AzureDevOpsClient GetAzureDevOpsClient(string repoUri, string? temporaryRepositoryPath = null)
+    private readonly string? _temporaryRepositoryPath = temporaryRepositoryPath;
+
+    public IAzureDevOpsClient GetAzureDevOpsClient(string repoUri, string? temporaryRepositoryPath = null)
     {
-        return new AzureDevOpsClient(repoUri, tokenProvider, processManager, logger, temporaryRepositoryPath);
+        return new AzureDevOpsClient(repoUri, tokenProvider, processManager, logger, temporaryRepositoryPath ?? _temporaryRepositoryPath);
     }
 }

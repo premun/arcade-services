@@ -2,12 +2,14 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
+using System.Net.Http;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 
 namespace Microsoft.DotNet.DarcLib;
 
-public interface IAzureDevOpsClient
+public interface IAzureDevOpsClient : IRemoteGitRepo
 {
     /// <summary>
     ///   If the release pipeline doesn't have an artifact source a new one is added.
@@ -25,6 +27,31 @@ public interface IAzureDevOpsClient
     /// <param name="build">Build which should be added as source of the release definition.</param>
     /// <returns>AzureDevOpsReleaseDefinition</returns>
     Task<AzureDevOpsReleaseDefinition> AdjustReleasePipelineArtifactSourceAsync(string accountName, string projectName, AzureDevOpsReleaseDefinition releaseDefinition, AzureDevOpsBuild build);
+
+    /// <summary>
+    ///     Execute a command on the remote repository.
+    /// </summary>
+    /// <param name="method">Http method</param>
+    /// <param name="accountName">Azure DevOps account name</param>
+    /// <param name="projectName">Project name</param>
+    /// <param name="requestPath">Path for request</param>
+    /// <param name="logger">Logger</param>
+    /// <param name="body">Optional body if <paramref name="method"/> is Put or Post</param>
+    /// <param name="versionOverride">API version override</param>
+    /// <param name="baseAddressSubpath">[baseAddressSubPath]dev.azure.com subdomain to make the request</param>
+    /// <param name="retryCount">Maximum number of tries to attempt the API request</param>
+    /// <returns>Http response</returns>
+    Task<JObject> ExecuteAzureDevOpsAPIRequestAsync(
+        HttpMethod method,
+        string accountName,
+        string projectName,
+        string requestPath,
+        ILogger logger,
+        string body = null,
+        string versionOverride = null,
+        bool logFailure = true,
+        string baseAddressSubpath = null,
+        int retryCount = 15);
 
     /// <summary>
     ///   Deletes an Azure Artifacts feed and all of its packages

@@ -1050,7 +1050,7 @@ public class DependencyCoherencyTests
 
         // Mock the remote used by build dependency graph to gather dependency details.
         var remoteMock = new Mock<IRemote>();
-        remoteMock.Setup(m => m.GetPackageSourcesAsync("repoA", "commit1")).ReturnsAsync(
+        remoteMock.Setup(m => m.GetPackageSourcesAsync("commit1")).ReturnsAsync(
             new[] { "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet5-transport/nuget/v3/index.json" });
 
         // Always return the main remote.
@@ -1451,7 +1451,7 @@ public class DependencyCoherencyTests
     private static void RepoHasDependencies(Mock<IRemote> remoteMock, 
         string repo, string commit, List<DependencyDetail> dependencies)
     {
-        remoteMock.Setup(m => m.GetDependenciesAsync(repo, commit, null)).ReturnsAsync(dependencies);
+        remoteMock.Setup(m => m.GetDependenciesAsync(commit, null)).ReturnsAsync(dependencies);
     }
 
     private static void RepoHadBuilds(Mock<IBasicBarClient> barClientMock, string repo, string commit, IEnumerable<Build> builds)

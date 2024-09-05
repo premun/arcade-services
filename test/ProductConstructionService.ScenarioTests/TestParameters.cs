@@ -82,8 +82,8 @@ public class TestParameters : IDisposable
             new Octokit.GitHubClient(
                 new Octokit.ProductHeaderValue(assembly.GetName().Name, assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion),
                 new InMemoryCredentialStore(new Octokit.Credentials(githubToken)));
-        var azDoClient =
-            new AzureDevOpsClient(
+        var azDoClientFactory =
+            new AzureDevOpsClientFactory(
                 azDoTokenProvider,
                 new ProcessManager(new NUnitLogger(), git),
                 new NUnitLogger(),
@@ -96,7 +96,7 @@ public class TestParameters : IDisposable
             githubToken,
             pcsApi,
             githubApi,
-            azDoClient,
+            azDoClientFactory,
             testDir,
             azDoTokenProvider,
             isCI);

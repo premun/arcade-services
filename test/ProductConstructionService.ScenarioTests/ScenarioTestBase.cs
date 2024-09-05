@@ -33,7 +33,7 @@ internal abstract class ScenarioTestBase
 
     protected Octokit.GitHubClient GitHubApi => _parameters.GitHubApi;
 
-    protected AzureDevOpsClient AzDoClient => _parameters.AzDoClient;
+    protected IAzureDevOpsClient GetAzDoClient(string repoUri) => _parameters.AzDoClientFactory.GetAzureDevOpsClient(repoUri);
 
     public void SetTestParameters(TestParameters parameters)
     {
@@ -164,6 +164,7 @@ internal abstract class ScenarioTestBase
 
     private async Task<IEnumerable<int>> SearchPullRequestsAsync(string repoUri, string targetPullRequestBranch)
     {
+        var azdoClient = GetAzDoClient(repoUri);
         (var accountName, var projectName, var repoName) = AzureDevOpsClient.ParseRepoUri(repoUri);
         var query = new StringBuilder();
 
@@ -171,7 +172,7 @@ internal abstract class ScenarioTestBase
         query.Append($"searchCriteria.status={prStatus.ToString().ToLower()}");
         query.Append($"&searchCriteria.targetRefName=refs/heads/{targetPullRequestBranch}");
 
-        JObject content = await _parameters.AzDoClient.ExecuteAzureDevOpsAPIRequestAsync(
+        JObject content = await azdoClient.ExecuteAzureDevOpsAPIRequestAsync(
             HttpMethod.Get,
             accountName,
             projectName,
@@ -190,6 +191,8 @@ internal abstract class ScenarioTestBase
         (var accountName, var projectName, var repoName) = AzureDevOpsClient.ParseRepoUri(repoUri);
         var apiBaseUrl = GetAzDoApiRepoUrl(targetRepoName);
 
+        var azdoClient = GetAzDoClient(repoUri);
+
         if (string.IsNullOrEmpty(expectedPRTitle))
         {
             throw new Exception($"{nameof(expectedPRTitle)} must be defined for AzDo PRs that require an update");
@@ -197,7 +200,7 @@ internal abstract class ScenarioTestBase
 
         for (var tries = 20; tries > 0; tries--)
         {
-            PullRequest pr = await AzDoClient.GetPullRequestAsync($"{apiBaseUrl}/pullRequests/{pullRequestId}");
+            PullRequest pr = await azdoClient.GetPullRequestAsync($"{apiBaseUrl}/pullRequests/{pullRequestId}");
             var trimmedTitle = Regex.Replace(pr.Title, @"\s+", " ");
 
             if (!isUpdated || trimmedTitle == expectedPRTitle)
@@ -208,7 +211,7 @@ internal abstract class ScenarioTestBase
 
                     try
                     {
-                        JObject content = await _parameters.AzDoClient.ExecuteAzureDevOpsAPIRequestAsync(
+                        JObject content = await azdoClient.ExecuteAzureDevOpsAPIRequestAsync(
                                 HttpMethod.Patch,
                                 accountName,
                                 projectName,
@@ -323,7 +326,8 @@ internal abstract class ScenarioTestBase
         trimmedTitle.Should().Be(expectedPRTitle);
 
         PrStatus expectedPRState = isCompleted ? PrStatus.Closed : PrStatus.Open;
-        var prStatus = await AzDoClient.GetPullRequestStatusAsync(GetAzDoApiRepoUrl(targetRepoName) + $"/pullRequests/{pullRequestId}");
+        var repoUri = GetAzDoApiRepoUrl(targetRepoName);
+        var prStatus = await GetAzDoClient(repoUri).GetPullRequestStatusAsync($"{repoUri}/pullRequests/{pullRequestId}");
         prStatus.Should().Be(expectedPRState);
 
         using (ChangeDirectory(repoDirectory))
