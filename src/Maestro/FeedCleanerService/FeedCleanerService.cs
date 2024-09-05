@@ -72,12 +72,12 @@ public sealed class FeedCleanerService : IFeedCleanerService, IServiceImplementa
 
         foreach (var azdoAccount in Options.AzdoAccounts)
         {
-            var azureDevOpsClient = _azureDevOpsClientFactory.GetAzureDevOpsClient();
+            var azureDevOpsClient = _azureDevOpsClientFactory.CreateAzureDevOpsAccountClient(azdoAccount);
 
             List<AzureDevOpsFeed> allFeeds;
             try
             {
-                allFeeds = await azureDevOpsClient.GetFeedsAsync(azdoAccount);
+                allFeeds = await azureDevOpsClient.GetFeedsAsync();
             }
             catch (Exception ex)
             {
@@ -152,8 +152,8 @@ public sealed class FeedCleanerService : IFeedCleanerService, IServiceImplementa
     private async Task<Dictionary<string, HashSet<string>>> GetPackageVersionsForFeedAsync(string account, string project, string feedName)
     {
         var packagesWithVersions = new Dictionary<string, HashSet<string>>();
-        var azureDevOpsClient = _azureDevOpsClientFactory.GetAzureDevOpsClient();
-        List<AzureDevOpsPackage> packagesInFeed = await azureDevOpsClient.GetPackagesForFeedAsync(account, project, feedName);
+        var azureDevOpsClient = _azureDevOpsClientFactory.CreateAzureDevOpsProjectClient(account, project);
+        List<AzureDevOpsPackage> packagesInFeed = await azureDevOpsClient.GetPackagesForFeedAsync(feedName);
         foreach (AzureDevOpsPackage package in packagesInFeed)
         {
             packagesWithVersions.Add(package.Name, new HashSet<string>(StringComparer.OrdinalIgnoreCase));

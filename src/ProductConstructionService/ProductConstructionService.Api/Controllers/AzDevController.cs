@@ -8,14 +8,14 @@ namespace ProductConstructionService.Api.Controllers;
 
 [Route("[controller]")]
 [Route("_/[controller]")]
-public class AzDevController(IAzureDevOpsClient azureDevOpsClient)
+public class AzDevController(IAzureDevOpsClientFactory azureDevOpsClientFactory)
     : ControllerBase
 {
-    private readonly IAzureDevOpsClient _azureDevOpsClient = azureDevOpsClient;
-
     [HttpGet("build/status/{account}/{project}/{definitionId}/{*branch}")]
     public async Task<IActionResult> GetBuildStatus(string account, string project, int definitionId, string? branch, int count, string status)
     {
-        return Ok(await _azureDevOpsClient.GetBuildsAsync(account, project, definitionId, branch, count, status));
+        var azdoClient = azureDevOpsClientFactory.CreateAzureDevOpsClient(account, project);
+        var builds = await azdoClient.GetBuildsAsync(definitionId, branch, count, status);
+        return Ok(builds);
     }
 }

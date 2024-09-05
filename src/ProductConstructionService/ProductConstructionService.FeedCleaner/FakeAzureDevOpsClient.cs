@@ -10,14 +10,18 @@ namespace ProductConstructionService.FeedCleaner;
 
 internal class FakeAzureDevOpsClientFactory : IAzureDevOpsClientFactory
 {
+    public IAzureDevOpsAccountClient CreateAzureDevOpsAccountClient(string accountName, string? temporaryRepositoryPath = null)
+        => new FakeAzureDevOpsClient();
     public IAzureDevOpsClient CreateAzureDevOpsClient(string repoUri, string? temporaryRepositoryPath = null)
         => new FakeAzureDevOpsClient();
     public IAzureDevOpsClient CreateAzureDevOpsClient(string accountName, string projectName, string repoName, string? temporaryRepositoryPath = null)
         => new FakeAzureDevOpsClient();
+    public IAzureDevOpsProjectClient CreateAzureDevOpsProjectClient(string accountName, string projectName, string? temporaryRepositoryPath = null)
+        => new FakeAzureDevOpsClient();
 }
 
 // TODO (https://github.com/dotnet/arcade-services/issues/3808) delete this class and use the normal AzureDevOpsClient
-internal class FakeAzureDevOpsClient : IAzureDevOpsClient
+internal class FakeAzureDevOpsClient : IAzureDevOpsClient, IAzureDevOpsAccountClient, IAzureDevOpsProjectClient
 {
     public bool AllowRetries
     {
@@ -55,7 +59,7 @@ internal class FakeAzureDevOpsClient : IAzureDevOpsClient
         => throw new NotImplementedException();
     public Task<AzureDevOpsBuild> GetBuildAsync(long buildId)
         => throw new NotImplementedException();
-    public Task<JObject> GetBuildsAsync(string account, string project, int definitionId, string branch, int count, string status)
+    public Task<JObject> GetBuildsAsync(int definitionId, string branch, int count, string status)
         => Task.FromResult(new JObject());
     public Task<Commit?> GetCommitAsync(string sha)
         => throw new NotImplementedException();
@@ -75,6 +79,8 @@ internal class FakeAzureDevOpsClient : IAzureDevOpsClient
         => throw new NotImplementedException();
     public Task<IList<Review>> GetLatestPullRequestReviewsAsync(string pullRequestUrl)
         => throw new NotImplementedException();
+    public Task<List<AzureDevOpsPackage>> GetPackagesForFeedAsync(string feedIdentifier, string project)
+        => throw new NotImplementedException();
     public Task<List<AzureDevOpsPackage>> GetPackagesForFeedAsync(string feedIdentifier)
         => throw new NotImplementedException();
     public Task<string> GetProjectIdAsync()
@@ -87,9 +93,7 @@ internal class FakeAzureDevOpsClient : IAzureDevOpsClient
         => throw new NotImplementedException();
     public Task<PrStatus> GetPullRequestStatusAsync(string pullRequestUrl)
         => throw new NotImplementedException();
-    public Task<AzureDevOpsRelease> GetReleaseAsync(int releaseId)
-        => throw new NotImplementedException();
-    public Task<AzureDevOpsReleaseDefinition> GetReleaseDefinitionAsync(long releaseDefinitionId)
+    public Task<AzureDevOpsRelease> GetReleaseAsync(string accountName, string projectName, int releaseId)
         => throw new NotImplementedException();
     public Task<GitDiff> GitDiffAsync(string baseVersion, string targetVersion)
         => throw new NotImplementedException();
@@ -99,9 +103,13 @@ internal class FakeAzureDevOpsClient : IAzureDevOpsClient
         => throw new NotImplementedException();
     public Task<IEnumerable<int>> SearchPullRequestsAsync(string pullRequestBranch, PrStatus status, string? keyword = null, string? author = null)
         => throw new NotImplementedException();
-    public Task<int> StartNewBuildAsync(int buildDefinitionId, string sourceBranch, string sourceVersion, Dictionary<string, string>? queueTimeVariables = null, Dictionary<string, string>? templateParameters = null, Dictionary<string, string>? pipelineResources = null)
-        => throw new NotImplementedException();
-    public Task<int> StartNewReleaseAsync(AzureDevOpsReleaseDefinition releaseDefinition, int barBuildId)
+    public Task<int> StartNewBuildAsync(
+            int azdoDefinitionId,
+            string sourceBranch,
+            string sourceVersion,
+            Dictionary<string, string>? queueTimeVariables = null,
+            Dictionary<string, string>? templateParameters = null,
+            Dictionary<string, string>? pipelineResources = null)
         => throw new NotImplementedException();
     public Task UpdatePullRequestAsync(string pullRequestUri, PullRequest pullRequest)
         => throw new NotImplementedException();

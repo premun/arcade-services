@@ -13,6 +13,10 @@ public interface IAzureDevOpsClientFactory
     IAzureDevOpsClient CreateAzureDevOpsClient(string repoUri, string? temporaryRepositoryPath = null);
 
     IAzureDevOpsClient CreateAzureDevOpsClient(string accountName, string projectName, string repoName, string? temporaryRepositoryPath = null);
+
+    IAzureDevOpsAccountClient CreateAzureDevOpsAccountClient(string accountName, string? temporaryRepositoryPath = null);
+
+    IAzureDevOpsProjectClient CreateAzureDevOpsProjectClient(string accountName, string projectName, string? temporaryRepositoryPath = null);
 }
 
 public class AzureDevOpsClientFactory(IAzureDevOpsTokenProvider tokenProvider, IProcessManager processManager, ILogger logger, string? temporaryRepositoryPath = null) : IAzureDevOpsClientFactory
@@ -21,12 +25,23 @@ public class AzureDevOpsClientFactory(IAzureDevOpsTokenProvider tokenProvider, I
 
     public IAzureDevOpsClient CreateAzureDevOpsClient(string repoUri, string? temporaryRepositoryPath = null)
     {
-        (string accountName, string projectName, string repoName) = AzureDevOpsClient.ParseRepoUri(repoUri);
+        (string accountName, string projectName, string repoName) = AzureDevOpsBaseClient.ParseRepoUri(repoUri);
         return CreateAzureDevOpsClient(accountName, projectName, repoName, temporaryRepositoryPath);
     }
 
     public IAzureDevOpsClient CreateAzureDevOpsClient(string accountName, string projectName, string repoName, string? temporaryRepositoryPath = null)
     {
         return new AzureDevOpsClient(accountName, projectName, repoName, tokenProvider, processManager, logger, temporaryRepositoryPath ?? _temporaryRepositoryPath);
+    }
+
+
+    public IAzureDevOpsAccountClient CreateAzureDevOpsAccountClient(string accountName, string? temporaryRepositoryPath = null)
+    {
+        return new AzureDevOpsAccountClient(accountName, tokenProvider, processManager, logger, temporaryRepositoryPath ?? _temporaryRepositoryPath);
+    }
+
+    public IAzureDevOpsProjectClient CreateAzureDevOpsProjectClient(string accountName, string projectName, string? temporaryRepositoryPath = null)
+    {
+        return new AzureDevOpsProjectClient(accountName, projectName, tokenProvider, processManager, logger, temporaryRepositoryPath ?? _temporaryRepositoryPath);
     }
 }

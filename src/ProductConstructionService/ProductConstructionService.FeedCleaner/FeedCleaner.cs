@@ -14,20 +14,20 @@ namespace ProductConstructionService.FeedCleaner;
 
 public class FeedCleaner
 {
-    private BuildAssetRegistryContext _context;
+    private readonly BuildAssetRegistryContext _context;
     private readonly HttpClient _httpClient;
-    private readonly IAzureDevOpsClient _azureDevOpsClient;
+    private readonly IAzureDevOpsClientFactory _azureDevOpsClientFactory;
     private readonly IOptions<FeedCleanerOptions> _options;
-    private ILogger<FeedCleaner> _logger;
+    private readonly ILogger<FeedCleaner> _logger;
 
     public FeedCleaner(
         BuildAssetRegistryContext context,
-        IAzureDevOpsClient azureDevOpsClient,
+        IAzureDevOpsClientFactory azureDevOpsClientFactory,
         IOptions<FeedCleanerOptions> options,
         ILogger<FeedCleaner> logger)
     {
         _context = context;
-        _azureDevOpsClient = azureDevOpsClient;
+        _azureDevOpsClientFactory = azureDevOpsClientFactory;
         _options = options;
         _logger = logger;
         _httpClient = new HttpClient(new HttpClientHandler() { CheckCertificateRevocationList = true });
@@ -51,7 +51,8 @@ public class FeedCleaner
             List<AzureDevOpsFeed> allFeeds;
             try
             {
-                allFeeds = await _azureDevOpsClient.GetFeedsAsync(azdoAccount);
+                var azdoClient = _azureDevOpsClientFactory.CreateAzureDevOpsAccountClient(azdoAccount);
+                allFeeds = await azdoClient.GetFeedsAsync();
             }
             catch (Exception ex)
             {

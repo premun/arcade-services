@@ -51,19 +51,19 @@ internal class AddBuildToChannelOperation : Operation
 
     private readonly AddBuildToChannelCommandLineOptions _options;
     private readonly ILogger<AddBuildToChannelOperation> _logger;
-    private readonly IAzureDevOpsClient _azdoClient;
+    private readonly IAzureDevOpsClientFactory _azdoClientFactory;
     private readonly IBarApiClient _barClient;
 
     public AddBuildToChannelOperation(
         AddBuildToChannelCommandLineOptions options,
         IBarApiClient barClient,
-        IAzureDevOpsClient azdoClient,
+        IAzureDevOpsClientFactory azdoClientFactory,
         ILogger<AddBuildToChannelOperation> logger)
     {
         _options = options;
         _barClient = barClient;
         _logger = logger;
-        _azdoClient = azdoClient;
+        _azdoClientFactory = azdoClientFactory;
     }
 
     /// <summary>
@@ -229,7 +229,9 @@ internal class AddBuildToChannelOperation : Operation
             return Constants.ErrorCode;
         }
 
-        var targetAzdoBuildStatus = await ValidateAzDOBuildAsync(_azdoClient, build.AzureDevOpsAccount, build.AzureDevOpsProject, build.AzureDevOpsBuildId.Value)
+        var azdoClient = _azdoClientFactory.CreateAzureDevOpsProjectClient(build.AzureDevOpsAccount, build.AzureDevOpsProject);
+
+        var targetAzdoBuildStatus = await ValidateAzDOBuildAsync(azdoClient, build.AzureDevOpsBuildId.Value)
             .ConfigureAwait(false);
 
         if (!targetAzdoBuildStatus)
@@ -270,8 +272,7 @@ internal class AddBuildToChannelOperation : Operation
 
         // Pass the same values to the variables and pipeline parameters so this works with the
         // v2 and v3 versions of the promotion pipeline.
-        int azdoBuildId = await _azdoClient.StartNewBuildAsync(build.AzureDevOpsAccount,
-            promotionPipelineInformation.project,
+        int azdoBuildId = await azdoClient.StartNewBuildAsync(
             promotionPipelineInformation.pipelineId,
             arcadeSDKSourceBranch,
             arcadeSDKSourceSHA,
@@ -298,10 +299,7 @@ internal class AddBuildToChannelOperation : Operation
             {
                 Console.WriteLine($"Waiting '{waitIntervalInSeconds.TotalSeconds}' seconds for promotion build to complete.");
                 await Task.Delay(waitIntervalInSeconds);
-                promotionBuild = await _azdoClient.GetBuildAsync(
-                    build.AzureDevOpsAccount,
-                    promotionPipelineInformation.project,
-                    azdoBuildId);
+                promotionBuild = await azdoClient.GetBuildAsync(azdoBuildId);
             } while (!promotionBuild.Status.Equals("completed", StringComparison.OrdinalIgnoreCase));
         }
         catch (Exception e)
@@ -325,11 +323,11 @@ internal class AddBuildToChannelOperation : Operation
         }
     }
 
-    private async Task<bool> ValidateAzDOBuildAsync(IAzureDevOpsClient azdoClient, string azureDevOpsAccount, string azureDevOpsProject, int azureDevOpsBuildId)
+    private async Task<bool> ValidateAzDOBuildAsync(IAzureDevOpsProjectClient azdoClient, int azureDevOpsBuildId)
     {
         try
         {
-            var artifacts = await azdoClient.GetBuildArtifactsAsync(azureDevOpsAccount, azureDevOpsProject, azureDevOpsBuildId, maxRetries: 5);
+            var artifacts = await azdoClient.GetBuildArtifactsAsync(azureDevOpsBuildId, maxRetries: 5);
 
             // The build manifest is always necessary
             if (!artifacts.Any(f => f.Name.Equals("AssetManifests")))
