@@ -9,6 +9,7 @@ using Azure.Identity;
 using EntityFrameworkCore.Triggers;
 using FluentValidation.AspNetCore;
 using Maestro.Authentication;
+using Maestro.Common;
 using Maestro.Common.AzureDevOpsTokens;
 using Maestro.Data;
 using Maestro.Data.Models;

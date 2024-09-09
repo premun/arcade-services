@@ -14,7 +14,6 @@ using Microsoft.VisualStudio.Services.Common;
 using Moq;
 using NUnit.Framework;
 using ProductConstructionService.Common;
-using ProductConstructionService.DependencyFlow.WorkItems;
 using ProductConstructionService.WorkItems;
 
 namespace ProductConstructionService.DependencyFlow.Tests;
@@ -40,9 +39,6 @@ internal abstract class UpdaterTests : TestsWithServices
     protected Dictionary<string, Mock<IRemote>> DarcRemotes { get; private set; } = null!;
     protected Mock<ICoherencyUpdateResolver> UpdateResolver { get; private set; } = null!;
     protected Mock<IMergePolicyEvaluator> MergePolicyEvaluator { get; private set; } = null!;
-
-    protected List<CodeFlowWorkItem> CodeFlowWorkItemsProduced { get; private set; } = null!;
-
 
     protected override void RegisterServices(IServiceCollection services)
     {
