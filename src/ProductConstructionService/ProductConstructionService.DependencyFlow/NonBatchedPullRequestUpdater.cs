@@ -4,6 +4,7 @@
 using Maestro.Data;
 using Maestro.Data.Models;
 using Microsoft.DotNet.DarcLib;
+using Microsoft.DotNet.DarcLib.VirtualMonoRepo;
 using Microsoft.Extensions.Logging;
 using ProductConstructionService.Common;
 using ProductConstructionService.DependencyFlow.WorkItems;
@@ -24,16 +25,21 @@ internal class NonBatchedPullRequestUpdater : PullRequestUpdater
 
     public NonBatchedPullRequestUpdater(
         NonBatchedPullRequestUpdaterId id,
-        IMergePolicyEvaluator mergePolicyEvaluator,
         BuildAssetRegistryContext context,
+        IMergePolicyEvaluator mergePolicyEvaluator,
         IRemoteFactory remoteFactory,
         IPullRequestUpdaterFactory updaterFactory,
         ICoherencyUpdateResolver coherencyUpdateResolver,
-        IPullRequestBuilder pullRequestBuilder,
         IPullRequestPolicyFailureNotifier pullRequestPolicyFailureNotifier,
+        IPullRequestBuilder pullRequestBuilder,
+        IBasicBarClient barClient,
+        ILocalLibGit2Client gitClient,
+        IVmrInfo vmrInfo,
+        IPcsVmrForwardFlower vmrForwardFlower,
+        IPcsVmrBackFlower vmrBackFlower,
+        ITelemetryRecorder telemetryRecorder,
         IRedisCacheFactory cacheFactory,
         IReminderManagerFactory reminderManagerFactory,
-        IWorkItemProducerFactory workItemProducerFactory,
         ILogger<NonBatchedPullRequestUpdater> logger)
         : base(
             id,
@@ -42,9 +48,14 @@ internal class NonBatchedPullRequestUpdater : PullRequestUpdater
             updaterFactory,
             coherencyUpdateResolver,
             pullRequestBuilder,
+            barClient,
+            gitClient,
+            vmrInfo,
+            vmrForwardFlower,
+            vmrBackFlower,
+            telemetryRecorder,
             cacheFactory,
             reminderManagerFactory,
-            workItemProducerFactory,
             logger)
     {
         _lazySubscription = new Lazy<Task<Subscription?>>(RetrieveSubscription);
