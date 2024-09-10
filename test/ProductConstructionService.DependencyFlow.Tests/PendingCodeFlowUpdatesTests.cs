@@ -29,7 +29,6 @@ internal class PendingCodeFlowUpdatesTests : PendingUpdatePullRequestUpdaterTest
         WithExistingCodeFlowPullRequest(build, canUpdate: false);
         await WhenProcessPendingUpdatesAsyncIsCalled(build, isCodeFlow: true);
 
-        ThenPcsShouldNotHaveBeenCalled(build, InProgressPrUrl);
         AndShouldHaveCodeFlowState(build, InProgressPrHeadBranch);
         AndShouldHaveInProgressPullRequestState(build);
     }
@@ -52,7 +51,6 @@ internal class PendingCodeFlowUpdatesTests : PendingUpdatePullRequestUpdaterTest
 
         await WhenProcessPendingUpdatesAsyncIsCalled(build, isCodeFlow: true);
 
-        ThenPcsShouldNotHaveBeenCalled(build, InProgressPrUrl);
         AndShouldHaveCodeFlowState(build, InProgressPrHeadBranch);
         AndShouldHaveInProgressPullRequestState(build);
         AndShouldHavePullRequestCheckReminder(build);
@@ -78,10 +76,9 @@ internal class PendingCodeFlowUpdatesTests : PendingUpdatePullRequestUpdaterTest
         WithExistingCodeFlowPullRequest(oldBuild, canUpdate: true);
         await WhenProcessPendingUpdatesAsyncIsCalled(newBuild, isCodeFlow: true);
 
-        ThenPcsShouldHaveBeenCalled(newBuild, InProgressPrUrl, out var prBranch);
+        AndCodeFlowPullRequestShouldHaveBeenCreated();
         AndShouldHaveNoPendingUpdateState();
         AndShouldHavePullRequestCheckReminder(newBuild);
-        prBranch.Should().Be(InProgressPrHeadBranch);
         AndShouldHaveCodeFlowState(newBuild, InProgressPrHeadBranch);
         AndShouldHaveInProgressPullRequestState(newBuild);
     }

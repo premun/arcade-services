@@ -26,51 +26,9 @@ internal class UpdateAssetsForCodeFlowTests : UpdateAssetsPullRequestUpdaterTest
             });
         Build build = GivenANewBuild(true);
 
-        await WhenUpdateAssetsAsyncIsCalled(build);
-
-        ThenShouldHavePendingUpdateState(build);
-        AndPcsShouldHaveBeenCalled(build, prUrl: null, out var requestedBranch);
-        AndShouldHaveCodeFlowState(build, requestedBranch);
-    }
-
-    [Test]
-    public async Task WaitForPrBranch()
-    {
-        GivenATestChannel();
-        GivenACodeFlowSubscription(
-            new SubscriptionPolicy
-            {
-                Batchable = false,
-                UpdateFrequency = UpdateFrequency.EveryBuild,
-            });
-        Build build = GivenANewBuild(true);
-
         GivenPendingUpdates(build);
         WithExistingCodeFlowStatus(build);
         WithoutExistingPrBranch();
-
-        await WhenUpdateAssetsAsyncIsCalled(build);
-
-        ThenShouldHavePendingUpdateState(build);
-        AndShouldHaveCodeFlowState(build, InProgressPrHeadBranch);
-    }
-
-    [Test]
-    public async Task UpdateWithPrBranchReady()
-    {
-        GivenATestChannel();
-        GivenACodeFlowSubscription(
-            new SubscriptionPolicy
-            {
-                Batchable = false,
-                UpdateFrequency = UpdateFrequency.EveryBuild,
-            });
-        Build build = GivenANewBuild(true);
-
-        GivenPendingUpdates(build);
-        WithExistingCodeFlowStatus(build);
-        WithExistingPrBranch();
-        CreatePullRequestShouldReturnAValidValue();
 
         await WhenUpdateAssetsAsyncIsCalled(build);
 
@@ -93,7 +51,6 @@ internal class UpdateAssetsForCodeFlowTests : UpdateAssetsPullRequestUpdaterTest
         };
 
         ThenUpdateReminderIsRemoved();
-        ThenPcsShouldNotHaveBeenCalled(build);
         AndCodeFlowPullRequestShouldHaveBeenCreated();
         AndShouldHaveCodeFlowState(build, InProgressPrHeadBranch);
         AndShouldHavePullRequestCheckReminder(build, expectedState);
@@ -120,7 +77,6 @@ internal class UpdateAssetsForCodeFlowTests : UpdateAssetsPullRequestUpdaterTest
         await WhenUpdateAssetsAsyncIsCalled(build);
 
         ThenShouldHavePendingUpdateState(build);
-        ThenPcsShouldNotHaveBeenCalled(build, InProgressPrUrl);
         AndShouldHaveCodeFlowState(build, InProgressPrHeadBranch);
         AndShouldHaveInProgressPullRequestState(build, coherencyCheckSuccessful: true);
         AndShouldHavePullRequestCheckReminder(build);
@@ -144,7 +100,6 @@ internal class UpdateAssetsForCodeFlowTests : UpdateAssetsPullRequestUpdaterTest
 
         await WhenUpdateAssetsAsyncIsCalled(build);
 
-        ThenPcsShouldNotHaveBeenCalled(build, InProgressPrUrl);
         AndShouldHaveCodeFlowState(build, InProgressPrHeadBranch);
         AndShouldHavePullRequestCheckReminder(build);
         AndShouldHaveInProgressPullRequestState(build);
@@ -171,10 +126,10 @@ internal class UpdateAssetsForCodeFlowTests : UpdateAssetsPullRequestUpdaterTest
 
         await WhenUpdateAssetsAsyncIsCalled(newBuild);
 
-        ThenPcsShouldHaveBeenCalled(newBuild, InProgressPrUrl, out _);
+        ThenShouldHaveInProgressPullRequestState(newBuild);
+        AndCodeFlowPullRequestShouldHaveBeenCreated();
         AndShouldHaveCodeFlowState(newBuild, InProgressPrHeadBranch);
         AndShouldHavePullRequestCheckReminder(newBuild);
-        AndShouldHaveInProgressPullRequestState(newBuild);
     }
 
     protected override void ThenShouldHavePendingUpdateState(Build forBuild, bool _ = false)

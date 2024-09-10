@@ -58,12 +58,6 @@ internal abstract class UpdaterTests : TestsWithServices
         // TODO (https://github.com/dotnet/arcade-services/issues/3866): Can be removed once we execute code flow directly
         // (when we remove producer factory from the constructor)
         Mock<IWorkItemProducerFactory> workItemProducerFactoryMock = new();
-        Mock<IWorkItemProducer<CodeFlowWorkItem>> workItemProducerMock = new();
-        workItemProducerMock.Setup(w => w.ProduceWorkItemAsync(It.IsAny<CodeFlowWorkItem>(), TimeSpan.Zero))
-            .ReturnsAsync(QueuesModelFactory.SendReceipt("message", DateTimeOffset.Now, DateTimeOffset.Now, "popReceipt", DateTimeOffset.Now))
-            .Callback<CodeFlowWorkItem, TimeSpan>((item, _) => CodeFlowWorkItemsProduced.Add(item));
-        workItemProducerFactoryMock.Setup(w => w.CreateProducer<CodeFlowWorkItem>())
-            .Returns(workItemProducerMock.Object);
         services.AddSingleton(workItemProducerFactoryMock.Object);
 
         RemoteFactory
@@ -86,7 +80,6 @@ internal abstract class UpdaterTests : TestsWithServices
         };
         MergePolicyEvaluator = new();
         UpdateResolver = new();
-        CodeFlowWorkItemsProduced = [];
     }
 
     [TearDown]

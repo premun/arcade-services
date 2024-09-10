@@ -8,6 +8,7 @@ using Maestro.Data.Models;
 using Maestro.DataProviders;
 using Maestro.MergePolicyEvaluation;
 using Microsoft.DotNet.DarcLib;
+using Microsoft.DotNet.DarcLib.VirtualMonoRepo;
 using Microsoft.DotNet.GitHub.Authentication;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.Services.Common;
@@ -36,6 +37,7 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
         services.AddTransient<IPullRequestBuilder, PullRequestBuilder>();
         services.AddSingleton(MergePolicyEvaluator.Object);
         services.AddSingleton(UpdateResolver.Object);
+        services.AddVmrManagers("git", Path.GetTempFileName(), Path.GetTempFileName(), null, null);
     }
 
     protected override Task BeforeExecute(IServiceProvider context)
@@ -154,25 +156,6 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
                 options => options
                     .Excluding(pr => pr.Title)
                     .Excluding(pr => pr.Description));
-    }
-
-    protected void ThenPcsShouldNotHaveBeenCalled(Build build, string? prUrl = null)
-    {
-        CodeFlowWorkItemsProduced
-            .Should()
-            .NotContain(request => request.BuildId == build.Id && (prUrl == null || request.PrUrl == prUrl));
-    }
-
-    protected void ThenPcsShouldHaveBeenCalled(Build build, string? prUrl, out string prBranch)
-        => AndPcsShouldHaveBeenCalled(build, prUrl, out prBranch);
-
-    protected void AndPcsShouldHaveBeenCalled(Build build, string? prUrl, out string prBranch)
-    {
-        var workItem = CodeFlowWorkItemsProduced
-            .FirstOrDefault(request => request.SubscriptionId == Subscription.Id && request.BuildId == build.Id && (prUrl == null || request.PrUrl == prUrl));
-
-        workItem.Should().NotBeNull();
-        prBranch = workItem!.PrBranch;
     }
 
     protected static void ValidatePRDescriptionContainsLinks(PullRequest pr)
