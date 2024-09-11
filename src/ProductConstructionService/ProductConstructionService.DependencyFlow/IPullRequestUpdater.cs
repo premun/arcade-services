@@ -10,7 +10,7 @@ public interface IPullRequestUpdater
     Task<bool> SynchronizeInProgressPullRequestAsync(
         InProgressPullRequest pullRequestCheck);
 
-    Task<bool> ProcessPendingUpdatesAsync(
+    Task<bool> ProcessSubscriptionUpdateAsync(
         SubscriptionUpdateWorkItem update);
 
     Task<bool> UpdateAssetsAsync(

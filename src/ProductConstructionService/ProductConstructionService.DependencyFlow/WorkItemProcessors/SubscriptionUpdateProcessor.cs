@@ -20,7 +20,7 @@ public class SubscriptionUpdateProcessor : WorkItemProcessor<SubscriptionUpdateW
         CancellationToken cancellationToken)
     {
         var updater = _updaterFactory.CreatePullRequestUpdater(PullRequestUpdaterId.Parse(workItem.ActorId));
-        await updater.ProcessPendingUpdatesAsync(workItem);
+        await updater.ProcessSubscriptionUpdateAsync(workItem);
         return true;
     }
 }

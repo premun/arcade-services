@@ -94,7 +94,7 @@ internal abstract class PullRequestUpdater : IPullRequestUpdater
     /// <returns>
     ///     True if updates have been applied; <see langword="false" /> otherwise.
     /// </returns>
-    public async Task<bool> ProcessPendingUpdatesAsync(SubscriptionUpdateWorkItem update)
+    public async Task<bool> ProcessSubscriptionUpdateAsync(SubscriptionUpdateWorkItem update)
     {
         _logger.LogInformation("Processing pending updates for subscription {subscriptionId}", update.SubscriptionId);
 

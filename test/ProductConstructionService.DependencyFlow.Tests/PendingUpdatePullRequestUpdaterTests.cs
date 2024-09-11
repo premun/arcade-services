@@ -14,7 +14,7 @@ internal abstract class PendingUpdatePullRequestUpdaterTests : PullRequestUpdate
             async context =>
             {
                 IPullRequestUpdater updater = CreatePullRequestActor(context);
-                await updater.ProcessPendingUpdatesAsync(CreateSubscriptionUpdate(forBuild, isCodeFlow));
+                await updater.ProcessSubscriptionUpdateAsync(CreateSubscriptionUpdate(forBuild, isCodeFlow));
             });
     }
 
