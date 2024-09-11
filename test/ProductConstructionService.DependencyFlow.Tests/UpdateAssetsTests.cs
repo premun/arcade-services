@@ -134,7 +134,9 @@ internal class UpdateAssetsTests : UpdateAssetsPullRequestUpdaterTests
         AndCreateNewBranchShouldHaveBeenCalled();
         AndCommitUpdatesShouldHaveBeenCalled(b);
         AndCreatePullRequestShouldHaveBeenCalled();
-        AndShouldHavePullRequestCheckReminder(b, CreatePullRequestCheckReminder(b,
+        AndShouldHavePullRequestCheckReminder(b, CreatePullRequestCheckReminder(
+            b,
+            InProgressPrUrl,
             coherencyCheckSuccessful: false,
             coherencyErrors: [
                 new CoherencyErrorDetails()

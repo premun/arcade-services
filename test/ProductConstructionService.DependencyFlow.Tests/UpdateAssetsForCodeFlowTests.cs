@@ -15,7 +15,7 @@ namespace ProductConstructionService.DependencyFlow.Tests;
 internal class UpdateAssetsForCodeFlowTests : UpdateAssetsPullRequestUpdaterTests
 {
     [Test]
-    public async Task UpdateWithNoExistingStateOrPrBranch()
+    public async Task UpdateWithNoExistingState()
     {
         GivenATestChannel();
         GivenACodeFlowSubscription(
@@ -28,7 +28,6 @@ internal class UpdateAssetsForCodeFlowTests : UpdateAssetsPullRequestUpdaterTest
 
         GivenPendingUpdates(build);
         WithExistingCodeFlowStatus(build);
-        WithoutExistingPrBranch();
 
         await WhenUpdateAssetsAsyncIsCalled(build);
 
@@ -52,6 +51,7 @@ internal class UpdateAssetsForCodeFlowTests : UpdateAssetsPullRequestUpdaterTest
 
         ThenUpdateReminderIsRemoved();
         AndCodeFlowPullRequestShouldHaveBeenCreated();
+        AndCodeShouldHaveBeenFlownForward(build);
         AndShouldHaveCodeFlowState(build, InProgressPrHeadBranch);
         AndShouldHavePullRequestCheckReminder(build, expectedState);
         AndShouldHaveInProgressPullRequestState(build, coherencyCheckSuccessful: null, expectedState: expectedState);
@@ -71,7 +71,6 @@ internal class UpdateAssetsForCodeFlowTests : UpdateAssetsPullRequestUpdaterTest
         Build build = GivenANewBuild(true);
 
         WithExistingCodeFlowStatus(build);
-        WithExistingPrBranch();
         WithExistingPullRequest(build, canUpdate: false);
 
         await WhenUpdateAssetsAsyncIsCalled(build);
@@ -95,7 +94,6 @@ internal class UpdateAssetsForCodeFlowTests : UpdateAssetsPullRequestUpdaterTest
         Build build = GivenANewBuild(true);
 
         WithExistingCodeFlowStatus(build);
-        WithExistingPrBranch();
         WithExistingPullRequest(build, canUpdate: true);
 
         await WhenUpdateAssetsAsyncIsCalled(build);
@@ -121,13 +119,12 @@ internal class UpdateAssetsForCodeFlowTests : UpdateAssetsPullRequestUpdaterTest
         newBuild.Commit = "sha456";
 
         WithExistingCodeFlowStatus(oldBuild);
-        WithExistingPrBranch();
         WithExistingPullRequest(oldBuild, canUpdate: true);
 
         await WhenUpdateAssetsAsyncIsCalled(newBuild);
 
         ThenShouldHaveInProgressPullRequestState(newBuild);
-        AndCodeFlowPullRequestShouldHaveBeenCreated();
+        AndCodeShouldHaveBeenFlownForward(newBuild);
         AndShouldHaveCodeFlowState(newBuild, InProgressPrHeadBranch);
         AndShouldHavePullRequestCheckReminder(newBuild);
     }

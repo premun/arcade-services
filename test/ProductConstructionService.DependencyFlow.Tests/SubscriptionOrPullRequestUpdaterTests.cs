@@ -101,12 +101,12 @@ internal abstract class SubscriptionOrPullRequestUpdaterTests : UpdaterTests
         {
             Channel = Channel,
             SourceRepository = SourceRepo,
-            TargetRepository = TargetRepo,
+            TargetRepository = VmrUri,
             TargetBranch = TargetBranch,
             PolicyObject = policy,
 
             SourceEnabled = true,
-            SourceDirectory = "repo",
+            TargetDirectory = "repo",
             ExcludedAssets = [new AssetFilter() { Filter = "Excluded.Package" }],
         };
         ContextUpdates.Add(context => context.Subscriptions.Add(Subscription));

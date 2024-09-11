@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using Azure.Storage.Queues.Models;
 using FluentAssertions;
 using Maestro.Data.Models;
 using Microsoft.DotNet.DarcLib;
@@ -28,6 +27,10 @@ internal abstract class UpdaterTests : TestsWithServices
     protected const string TargetBranch = "target.branch";
     protected const string NewBuildNumber = "build.number";
     protected const string NewCommit = "sha2";
+    protected const string VmrPath = "D:\\vmr";
+    protected const string TmpPath = "D:\\tmp";
+    protected const string VmrUri = "https://github.com/maestro-auth-test/dnceng-vmr";
+    protected const string VmrPullRequestUri = $"{VmrUri}/pulls/1";
 
     protected Dictionary<string, object> ExpectedCacheState { get; private set; } = null!;
     protected Dictionary<string, object> ExpectedReminders { get; private set; } = null!;

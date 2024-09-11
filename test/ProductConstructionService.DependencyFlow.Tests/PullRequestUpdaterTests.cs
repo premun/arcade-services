@@ -26,9 +26,6 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
     private const long InstallationId = 1174;
     protected const string InProgressPrUrl = "https://github.com/owner/repo/pull/10";
     protected const string InProgressPrHeadBranch = "pr.head.branch";
-    private const string VmrPath = "D:\\vmr";
-    private const string TmpPath = "D:\\tmp";
-    private const string VmrUri = "https://github.com/maestro-auth-test/dnceng-vmr";
 
     private Mock<IPcsVmrBackFlower> _backFlower = null!;
     private Mock<IPcsVmrForwardFlower> _forwardFlower = null!;
@@ -53,7 +50,7 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
         services.AddSingleton(_gitClient.Object);
 
         _forwardFlower.SetReturnsDefault(Task.FromResult(true));
-        _backFlower.SetReturnsDefault(Task.FromResult((true, new NativePath("."))));
+        _backFlower.SetReturnsDefault(Task.FromResult((true, new NativePath(TargetRepo))));
         _gitClient.SetReturnsDefault(Task.CompletedTask);
 
         services.AddGitHubTokenProvider();
@@ -184,28 +181,28 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
                     .Excluding(pr => pr.Description));
     }
 
-    protected void ThenCodeShouldHaveBeenBackflown(Microsoft.DotNet.Maestro.Client.Models.Build build)
+    protected void ThenCodeShouldHaveBeenBackflown(Build build)
     {
         _backFlower
             .Verify(b => b.FlowBackAsync(
-                SourceRepo,
-                build,
+                Subscription.SourceDirectory,
+                It.Is<Microsoft.DotNet.Maestro.Client.Models.Build>(b => b.Id == build.Id && b.Commit == build.Commit),
                 TargetBranch,
                 InProgressPrHeadBranch,
                 It.IsAny<CancellationToken>()),
             Times.Once);
 
         _gitClient.Verify(
-            g => g.Push(VmrPath, InProgressPrHeadBranch, "foo" /* TODO */, It.IsAny<LibGit2Sharp.Identity>()),
+            g => g.Push(TargetRepo, InProgressPrHeadBranch, TargetRepo, It.IsAny<LibGit2Sharp.Identity>()),
             Times.Once);
     }
 
-    protected void ThenCodeShouldHaveBeenFlownForward(Microsoft.DotNet.Maestro.Client.Models.Build build)
+    protected void AndCodeShouldHaveBeenFlownForward(Build build)
     {
         _forwardFlower
             .Verify(b => b.FlowForwardAsync(
-                SourceRepo,
-                build,
+                Subscription.TargetDirectory,
+                It.Is<Microsoft.DotNet.Maestro.Client.Models.Build>(b => b.Id == build.Id && b.Commit == build.Commit),
                 TargetBranch,
                 InProgressPrHeadBranch,
                 It.IsAny<CancellationToken>()),
@@ -224,23 +221,12 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
 
     protected void CreatePullRequestShouldReturnAValidValue()
     {
-        DarcRemotes[TargetRepo]
+        var targetRepo = Subscription.TargetDirectory != null ? VmrUri : TargetRepo;
+        var prUrl = Subscription.TargetDirectory != null ? VmrPullRequestUri : InProgressPrUrl;
+
+        DarcRemotes[targetRepo]
             .Setup(s => s.CreatePullRequestAsync(It.IsAny<string>(), It.IsAny<PullRequest>()))
-            .ReturnsAsync(InProgressPrUrl);
-    }
-
-    protected void WithExistingPrBranch()
-    {
-        DarcRemotes[TargetRepo]
-            .Setup(s => s.BranchExistsAsync(TargetRepo, It.IsAny<string>()))
-            .ReturnsAsync(true);
-    }
-
-    protected void WithoutExistingPrBranch()
-    {
-        DarcRemotes[TargetRepo]
-            .Setup(s => s.BranchExistsAsync(TargetRepo, It.IsAny<string>()))
-            .ReturnsAsync(false);
+            .ReturnsAsync(prUrl);
     }
 
     protected void AndUpdatePullRequestShouldHaveBeenCalled()
@@ -328,20 +314,26 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
 
     protected void WithExistingPullRequest(Build forBuild, bool canUpdate)
     {
+        var prUrl = Subscription.TargetDirectory != null
+            ? VmrPullRequestUri
+            : InProgressPrUrl;
+
         AfterDbUpdateActions.Add(() =>
         {
-            var pr = CreatePullRequestCheckReminder(forBuild);
+            var pr = CreatePullRequestCheckReminder(forBuild, prUrl);
             SetState(Subscription, pr);
             SetExpectedState(Subscription, pr);
         });
 
-        var remote = DarcRemotes.GetOrAddValue(TargetRepo, () => CreateMock<IRemote>());
-        DarcRemotes[TargetRepo]
-            .Setup(x => x.GetPullRequestStatusAsync(InProgressPrUrl))
+        var targetRepo = Subscription.TargetDirectory != null ? VmrUri : TargetRepo;
+
+        var remote = DarcRemotes.GetOrAddValue(targetRepo, () => CreateMock<IRemote>());
+        DarcRemotes[targetRepo]
+            .Setup(x => x.GetPullRequestStatusAsync(prUrl))
             .ReturnsAsync(PrStatus.Open);
 
-        DarcRemotes[TargetRepo]
-            .Setup(r => r.GetPullRequestAsync(InProgressPrUrl))
+        DarcRemotes[targetRepo]
+            .Setup(r => r.GetPullRequestAsync(prUrl))
             .ReturnsAsync(
                 new PullRequest
                 {
@@ -362,24 +354,28 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
 
         MergePolicyEvaluator
             .Setup(x => x.EvaluateAsync(
-                It.Is<IPullRequest>(pr => pr.Url == InProgressPrUrl),
+                It.Is<IPullRequest>(pr => pr.Url == prUrl),
                 It.IsAny<IRemote>(),
                 It.IsAny<IReadOnlyList<MergePolicyDefinition>>()))
             .ReturnsAsync(results);
     }
 
-    protected void WithExistingCodeFlowPullRequest(Build forBuild, bool canUpdate)
+    protected IDisposable WithExistingCodeFlowPullRequest(Build forBuild, bool canUpdate)
     {
+        var prUrl = Subscription.TargetDirectory != null
+            ? VmrPullRequestUri
+            : InProgressPrUrl;
+
+        var targetRepo = Subscription.TargetDirectory != null
+            ? VmrUri
+            : TargetRepo;
+
         AfterDbUpdateActions.Add(() =>
         {
-            var pr = CreatePullRequestCheckReminder(forBuild);
+            var pr = CreatePullRequestCheckReminder(forBuild, prUrl);
             SetState(Subscription, pr);
             SetExpectedState(Subscription, pr);
         });
-
-        DarcRemotes[TargetRepo]
-            .Setup(x => x.GetPullRequestStatusAsync(InProgressPrUrl))
-            .ReturnsAsync(PrStatus.Open);
 
         var results = canUpdate
             ? new MergePolicyEvaluationResults([])
@@ -394,10 +390,20 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
 
         MergePolicyEvaluator
             .Setup(x => x.EvaluateAsync(
-                It.Is<IPullRequest>(pr => pr.Url == InProgressPrUrl),
+                It.Is<IPullRequest>(pr => pr.Url == prUrl),
                 It.IsAny<IRemote>(),
                 It.IsAny<IReadOnlyList<MergePolicyDefinition>>()))
             .ReturnsAsync(results);
+
+        var remote = DarcRemotes.GetOrAddValue(targetRepo, () => CreateMock<IRemote>());
+        remote
+            .Setup(x => x.GetPullRequestStatusAsync(prUrl))
+            .ReturnsAsync(PrStatus.Open);
+        remote
+            .Setup(x => x.CreateOrUpdatePullRequestMergeStatusInfoAsync(prUrl, /* results.Results */ It.IsAny<IReadOnlyList<MergePolicyEvaluationResult>>()))
+            .Returns(Task.CompletedTask);
+
+        return Disposable.Create(remote.VerifyAll);
     }
 
     protected void WithExistingCodeFlowStatus(Build build)
@@ -414,7 +420,11 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
 
     protected void AndShouldHavePullRequestCheckReminder(Build forBuild, InProgressPullRequest? expectedState = null)
     {
-        SetExpectedReminder(Subscription, expectedState ?? CreatePullRequestCheckReminder(forBuild));
+        var prUrl = Subscription.TargetDirectory != null
+            ? VmrPullRequestUri
+            : InProgressPrUrl;
+
+        SetExpectedReminder(Subscription, expectedState ?? CreatePullRequestCheckReminder(forBuild, prUrl));
     }
 
     protected void AndShouldHaveInProgressPullRequestState(
@@ -423,7 +433,11 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
         List<CoherencyErrorDetails>? coherencyErrors = null,
         InProgressPullRequest? expectedState = null)
     {
-        SetExpectedState(Subscription, expectedState ?? CreatePullRequestCheckReminder(forBuild, coherencyCheckSuccessful, coherencyErrors));
+        var prUrl = Subscription.TargetDirectory != null
+            ? VmrPullRequestUri
+            : InProgressPrUrl;
+
+        SetExpectedState(Subscription, expectedState ?? CreatePullRequestCheckReminder(forBuild, prUrl, coherencyCheckSuccessful, coherencyErrors));
     }
 
     protected void ThenShouldHaveInProgressPullRequestState(Build forBuild, InProgressPullRequest? expectedState = null)
@@ -485,6 +499,7 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
 
     protected InProgressPullRequest CreatePullRequestCheckReminder(
             Build forBuild,
+            string prUrl,
             bool? coherencyCheckSuccessful = true,
             List<CoherencyErrorDetails>? coherencyErrors = null)
         => new()
@@ -508,6 +523,6 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
                 .ToList(),
             CoherencyCheckSuccessful = coherencyCheckSuccessful,
             CoherencyErrors = coherencyErrors,
-            Url = InProgressPrUrl,
+            Url = prUrl,
         };
 }

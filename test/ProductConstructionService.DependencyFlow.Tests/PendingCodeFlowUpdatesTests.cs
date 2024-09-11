@@ -22,14 +22,14 @@ internal class PendingCodeFlowUpdatesTests : PendingUpdatePullRequestUpdaterTest
         Build build = GivenANewBuild(true);
 
         WithExistingCodeFlowStatus(build);
-        WithExistingPrBranch();
         AndPendingUpdates(build, isCodeFlow: true);
 
-        WithExistingCodeFlowPullRequest(build, canUpdate: false);
-        await WhenProcessPendingUpdatesAsyncIsCalled(build, isCodeFlow: true);
-
-        AndShouldHaveCodeFlowState(build, InProgressPrHeadBranch);
-        AndShouldHaveInProgressPullRequestState(build);
+        using (WithExistingCodeFlowPullRequest(build, canUpdate: false))
+        {
+            await WhenProcessPendingUpdatesAsyncIsCalled(build, isCodeFlow: true);
+            AndShouldHaveCodeFlowState(build, InProgressPrHeadBranch);
+            AndShouldHaveInProgressPullRequestState(build);
+        }
     }
 
     [Test]
@@ -45,14 +45,14 @@ internal class PendingCodeFlowUpdatesTests : PendingUpdatePullRequestUpdaterTest
         Build build = GivenANewBuild(true);
 
         WithExistingCodeFlowStatus(build);
-        WithExistingPrBranch();
-        WithExistingCodeFlowPullRequest(build, canUpdate: true);
+        using (WithExistingCodeFlowPullRequest(build, canUpdate: true))
+        {
+            await WhenProcessPendingUpdatesAsyncIsCalled(build, isCodeFlow: true);
 
-        await WhenProcessPendingUpdatesAsyncIsCalled(build, isCodeFlow: true);
-
-        AndShouldHaveCodeFlowState(build, InProgressPrHeadBranch);
-        AndShouldHaveInProgressPullRequestState(build);
-        AndShouldHavePullRequestCheckReminder(build);
+            AndShouldHaveCodeFlowState(build, InProgressPrHeadBranch);
+            AndShouldHaveInProgressPullRequestState(build);
+            AndShouldHavePullRequestCheckReminder(build);
+        }
     }
 
     [Test]
@@ -70,15 +70,16 @@ internal class PendingCodeFlowUpdatesTests : PendingUpdatePullRequestUpdaterTest
         newBuild.Commit = "sha456";
 
         WithExistingCodeFlowStatus(oldBuild);
-        WithExistingPrBranch();
-        WithExistingCodeFlowPullRequest(oldBuild, canUpdate: true);
 
-        await WhenProcessPendingUpdatesAsyncIsCalled(newBuild, isCodeFlow: true);
+        using (WithExistingCodeFlowPullRequest(oldBuild, canUpdate: true))
+        {
+            await WhenProcessPendingUpdatesAsyncIsCalled(newBuild, isCodeFlow: true);
 
-        //ThenCodeShouldHaveBeenBackflown(new Microsoft.DotNet.Maestro.Client.Models.Build(newBuild));
-        AndShouldHaveNoPendingUpdateState();
-        AndShouldHavePullRequestCheckReminder(newBuild);
-        AndShouldHaveCodeFlowState(newBuild, InProgressPrHeadBranch);
-        AndShouldHaveInProgressPullRequestState(newBuild);
+            //ThenCodeShouldHaveBeenBackflown(new Microsoft.DotNet.Maestro.Client.Models.Build(newBuild));
+            AndShouldHaveNoPendingUpdateState();
+            AndShouldHavePullRequestCheckReminder(newBuild);
+            AndShouldHaveCodeFlowState(newBuild, InProgressPrHeadBranch);
+            AndShouldHaveInProgressPullRequestState(newBuild);
+        }
     }
 }
