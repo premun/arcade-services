@@ -72,11 +72,10 @@ internal class PendingCodeFlowUpdatesTests : PendingUpdatePullRequestUpdaterTest
 
         WithExistingCodeFlowStatus(oldBuild);
         WithExistingPrBranch();
-
         WithExistingCodeFlowPullRequest(oldBuild, canUpdate: true);
+
         await WhenProcessPendingUpdatesAsyncIsCalled(newBuild, isCodeFlow: true);
 
-        AndCodeFlowPullRequestShouldHaveBeenCreated();
         AndShouldHaveNoPendingUpdateState();
         AndShouldHavePullRequestCheckReminder(newBuild);
         AndShouldHaveCodeFlowState(newBuild, InProgressPrHeadBranch);
