@@ -925,10 +925,11 @@ internal abstract class PullRequestUpdater : IPullRequestUpdater
         }
         catch (Exception e)
         {
-            // TODO https://github.com/dotnet/arcade-services/issues/3318: Handle this
-            _logger.LogError(e, "Failed to request branch update for PR {url} for subscription {subscriptionId}",
+            // TODO https://github.com/dotnet/arcade-services/issues/3318: Handle this - Maybe we need to set a reminder and try again?
+            _logger.LogError(e, "Failed to update sources and packages for PR {url} of subscription {subscriptionId}",
                 pr.Url,
                 update.SubscriptionId);
+            return false;
         }
 
         _logger.LogInformation("New code flow changes requested");

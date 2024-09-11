@@ -8,11 +8,13 @@ using Maestro.Data.Models;
 using Maestro.DataProviders;
 using Maestro.MergePolicyEvaluation;
 using Microsoft.DotNet.DarcLib;
+using Microsoft.DotNet.DarcLib.Helpers;
 using Microsoft.DotNet.DarcLib.VirtualMonoRepo;
 using Microsoft.DotNet.GitHub.Authentication;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.Services.Common;
 using Moq;
+using NUnit.Framework;
 using ProductConstructionService.DependencyFlow.WorkItems;
 using Asset = Maestro.Contracts.Asset;
 using AssetData = Microsoft.DotNet.Maestro.Client.Models.AssetData;
@@ -24,20 +26,41 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
     private const long InstallationId = 1174;
     protected const string InProgressPrUrl = "https://github.com/owner/repo/pull/10";
     protected const string InProgressPrHeadBranch = "pr.head.branch";
+    private const string VmrPath = "D:\\vmr";
+    private const string TmpPath = "D:\\tmp";
+    private const string VmrUri = "https://github.com/maestro-auth-test/dnceng-vmr";
+
+    private Mock<IPcsVmrBackFlower> _backFlower = null!;
+    private Mock<IPcsVmrForwardFlower> _forwardFlower = null!;
+    private Mock<ILocalLibGit2Client> _gitClient = null!;
 
     private string _newBranch = null!;
+
+    [SetUp]
+    public void PullRequestUpdaterTests_SetUp()
+    {
+        _backFlower = new();
+        _forwardFlower = new();
+        _gitClient = new();
+    }
 
     protected override void RegisterServices(IServiceCollection services)
     {
         base.RegisterServices(services);
 
+        services.AddSingleton(_backFlower.Object);
+        services.AddSingleton(_forwardFlower.Object);
+        services.AddSingleton(_gitClient.Object);
+
+        _forwardFlower.SetReturnsDefault(Task.FromResult(true));
+        _backFlower.SetReturnsDefault(Task.FromResult((true, new NativePath("."))));
+        _gitClient.SetReturnsDefault(Task.CompletedTask);
+
         services.AddGitHubTokenProvider();
         services.AddSingleton<IGitHubClientFactory, GitHubClientFactory>();
         services.AddScoped<IBasicBarClient, SqlBarClient>();
         services.AddTransient<IPullRequestBuilder, PullRequestBuilder>();
-        services.AddSingleton(MergePolicyEvaluator.Object);
-        services.AddSingleton(UpdateResolver.Object);
-        services.AddVmrManagers("git", Path.GetTempFileName(), Path.GetTempFileName(), null, null);
+        services.AddVmrManagers("git", VmrPath, TmpPath, null, null);
     }
 
     protected override Task BeforeExecute(IServiceProvider context)
@@ -49,6 +72,9 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
                 RepositoryName = TargetRepo,
                 InstallationId = InstallationId
             });
+
+        context.GetRequiredService<IVmrInfo>().VmrUri = VmrUri;
+
         return base.BeforeExecute(context);
     }
 
@@ -156,6 +182,38 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
                 options => options
                     .Excluding(pr => pr.Title)
                     .Excluding(pr => pr.Description));
+    }
+
+    protected void ThenCodeShouldHaveBeenBackflown(Microsoft.DotNet.Maestro.Client.Models.Build build)
+    {
+        _backFlower
+            .Verify(b => b.FlowBackAsync(
+                SourceRepo,
+                build,
+                TargetBranch,
+                InProgressPrHeadBranch,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        _gitClient.Verify(
+            g => g.Push(VmrPath, InProgressPrHeadBranch, "foo" /* TODO */, It.IsAny<LibGit2Sharp.Identity>()),
+            Times.Once);
+    }
+
+    protected void ThenCodeShouldHaveBeenFlownForward(Microsoft.DotNet.Maestro.Client.Models.Build build)
+    {
+        _forwardFlower
+            .Verify(b => b.FlowForwardAsync(
+                SourceRepo,
+                build,
+                TargetBranch,
+                InProgressPrHeadBranch,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        _gitClient.Verify(
+            g => g.Push(VmrPath, InProgressPrHeadBranch, VmrUri, It.IsAny<LibGit2Sharp.Identity>()),
+            Times.Once);
     }
 
     protected static void ValidatePRDescriptionContainsLinks(PullRequest pr)

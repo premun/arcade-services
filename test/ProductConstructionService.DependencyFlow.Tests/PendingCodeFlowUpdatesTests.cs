@@ -1,7 +1,6 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using FluentAssertions;
 using Maestro.Data.Models;
 using NUnit.Framework;
 
@@ -76,6 +75,7 @@ internal class PendingCodeFlowUpdatesTests : PendingUpdatePullRequestUpdaterTest
 
         await WhenProcessPendingUpdatesAsyncIsCalled(newBuild, isCodeFlow: true);
 
+        //ThenCodeShouldHaveBeenBackflown(new Microsoft.DotNet.Maestro.Client.Models.Build(newBuild));
         AndShouldHaveNoPendingUpdateState();
         AndShouldHavePullRequestCheckReminder(newBuild);
         AndShouldHaveCodeFlowState(newBuild, InProgressPrHeadBranch);

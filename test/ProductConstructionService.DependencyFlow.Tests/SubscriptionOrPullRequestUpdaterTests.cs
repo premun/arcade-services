@@ -33,6 +33,8 @@ internal abstract class SubscriptionOrPullRequestUpdaterTests : UpdaterTests
     {
         base.RegisterServices(services);
 
+        services.AddSingleton(MergePolicyEvaluator.Object);
+        services.AddSingleton(UpdateResolver.Object);
         services.AddSingleton(HostingEnvironment.Object);
         services.AddBuildAssetRegistry(options =>
         {
