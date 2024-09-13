@@ -331,21 +331,9 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
         var targetRepo = Subscription.TargetDirectory != null ? VmrUri : TargetRepo;
 
         var remote = DarcRemotes.GetOrAddValue(targetRepo, () => CreateMock<IRemote>());
-        DarcRemotes[targetRepo]
+        remote
             .Setup(x => x.GetPullRequestStatusAsync(prUrl))
             .ReturnsAsync(PrStatus.Open);
-
-        if (canUpdate)
-        {
-            remote
-                .Setup(r => r.GetPullRequestAsync(prUrl))
-                .ReturnsAsync(
-                    new PullRequest
-                    {
-                        HeadBranch = InProgressPrHeadBranch,
-                        BaseBranch = TargetBranch
-                    });
-        }
 
         var results = canUpdate
             ? new MergePolicyEvaluationResults([])
@@ -357,6 +345,23 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
                     "Fake one",
                     Mock.Of<IMergePolicyInfo>(x => x.Name == "Policy" && x.DisplayName == "Some policy"))
             ]);
+
+        if (canUpdate)
+        {
+            // TODO: Only set this up sometimes
+            remote
+                .Setup(r => r.GetPullRequestAsync(prUrl))
+                .ReturnsAsync(
+                    new PullRequest
+                    {
+                        HeadBranch = InProgressPrHeadBranch,
+                        BaseBranch = TargetBranch
+                    });
+
+            remote
+                .Setup(r => r.CreateOrUpdatePullRequestMergeStatusInfoAsync(prUrl, results.Results))
+                .Returns(Task.CompletedTask);
+        }
 
         MergePolicyEvaluator
             .Setup(x => x.EvaluateAsync(
@@ -408,7 +413,7 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
             .Setup(x => x.GetPullRequestStatusAsync(prUrl))
             .ReturnsAsync(PrStatus.Open);
         remote
-            .Setup(x => x.CreateOrUpdatePullRequestMergeStatusInfoAsync(prUrl, /* results.Results */ It.IsAny<IReadOnlyList<MergePolicyEvaluationResult>>()))
+            .Setup(x => x.CreateOrUpdatePullRequestMergeStatusInfoAsync(prUrl, results.Results))
             .Returns(Task.CompletedTask);
 
         return Disposable.Create(remote.VerifyAll);
