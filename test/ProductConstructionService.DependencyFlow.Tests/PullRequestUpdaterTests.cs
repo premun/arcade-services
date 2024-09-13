@@ -197,7 +197,7 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
             Times.Once);
     }
 
-    protected void AndCodeShouldHaveBeenFlownForward(Build build)
+    protected void ThenCodeShouldHaveBeenFlownForward(Build build)
     {
         _forwardFlower
             .Verify(b => b.FlowForwardAsync(
@@ -212,6 +212,9 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
             g => g.Push(VmrPath, InProgressPrHeadBranch, VmrUri, It.IsAny<LibGit2Sharp.Identity>()),
             Times.Once);
     }
+
+    protected void AndCodeShouldHaveBeenFlownForward(Build build)
+        => ThenCodeShouldHaveBeenFlownForward(build);
 
     protected static void ValidatePRDescriptionContainsLinks(PullRequest pr)
     {
@@ -312,7 +315,7 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
                 });
     }
 
-    protected void WithExistingPullRequest(Build forBuild, bool canUpdate)
+    protected IDisposable WithExistingPullRequest(Build forBuild, bool canUpdate)
     {
         var prUrl = Subscription.TargetDirectory != null
             ? VmrPullRequestUri
@@ -332,14 +335,17 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
             .Setup(x => x.GetPullRequestStatusAsync(prUrl))
             .ReturnsAsync(PrStatus.Open);
 
-        DarcRemotes[targetRepo]
-            .Setup(r => r.GetPullRequestAsync(prUrl))
-            .ReturnsAsync(
-                new PullRequest
-                {
-                    HeadBranch = InProgressPrHeadBranch,
-                    BaseBranch = TargetBranch
-                });
+        if (canUpdate)
+        {
+            remote
+                .Setup(r => r.GetPullRequestAsync(prUrl))
+                .ReturnsAsync(
+                    new PullRequest
+                    {
+                        HeadBranch = InProgressPrHeadBranch,
+                        BaseBranch = TargetBranch
+                    });
+        }
 
         var results = canUpdate
             ? new MergePolicyEvaluationResults([])
@@ -358,6 +364,8 @@ internal abstract class PullRequestUpdaterTests : SubscriptionOrPullRequestUpdat
                 It.IsAny<IRemote>(),
                 It.IsAny<IReadOnlyList<MergePolicyDefinition>>()))
             .ReturnsAsync(results);
+
+        return Disposable.Create(remote.VerifyAll);
     }
 
     protected IDisposable WithExistingCodeFlowPullRequest(Build forBuild, bool canUpdate)

@@ -75,7 +75,7 @@ internal class PendingCodeFlowUpdatesTests : PendingUpdatePullRequestUpdaterTest
         {
             await WhenProcessPendingUpdatesAsyncIsCalled(newBuild, isCodeFlow: true);
 
-            //ThenCodeShouldHaveBeenBackflown(new Microsoft.DotNet.Maestro.Client.Models.Build(newBuild));
+            ThenCodeShouldHaveBeenFlownForward(newBuild);
             AndShouldHaveNoPendingUpdateState();
             AndShouldHavePullRequestCheckReminder(newBuild);
             AndShouldHaveCodeFlowState(newBuild, InProgressPrHeadBranch);

@@ -71,14 +71,15 @@ internal class UpdateAssetsForCodeFlowTests : UpdateAssetsPullRequestUpdaterTest
         Build build = GivenANewBuild(true);
 
         WithExistingCodeFlowStatus(build);
-        WithExistingPullRequest(build, canUpdate: false);
+        using (WithExistingPullRequest(build, canUpdate: false))
+        {
+            await WhenUpdateAssetsAsyncIsCalled(build);
 
-        await WhenUpdateAssetsAsyncIsCalled(build);
-
-        ThenShouldHavePendingUpdateState(build);
-        AndShouldHaveCodeFlowState(build, InProgressPrHeadBranch);
-        AndShouldHaveInProgressPullRequestState(build, coherencyCheckSuccessful: true);
-        AndShouldHavePullRequestCheckReminder(build);
+            ThenShouldHavePendingUpdateState(build);
+            AndShouldHaveCodeFlowState(build, InProgressPrHeadBranch);
+            AndShouldHaveInProgressPullRequestState(build, coherencyCheckSuccessful: true);
+            AndShouldHavePullRequestCheckReminder(build);
+        }
     }
 
     [Test]
@@ -94,13 +95,14 @@ internal class UpdateAssetsForCodeFlowTests : UpdateAssetsPullRequestUpdaterTest
         Build build = GivenANewBuild(true);
 
         WithExistingCodeFlowStatus(build);
-        WithExistingPullRequest(build, canUpdate: true);
+        using (WithExistingPullRequest(build, canUpdate: true))
+        {
+            await WhenUpdateAssetsAsyncIsCalled(build);
 
-        await WhenUpdateAssetsAsyncIsCalled(build);
-
-        AndShouldHaveCodeFlowState(build, InProgressPrHeadBranch);
-        AndShouldHavePullRequestCheckReminder(build);
-        AndShouldHaveInProgressPullRequestState(build);
+            AndShouldHaveCodeFlowState(build, InProgressPrHeadBranch);
+            AndShouldHavePullRequestCheckReminder(build);
+            AndShouldHaveInProgressPullRequestState(build);
+        }
     }
 
     [Test]
@@ -119,14 +121,16 @@ internal class UpdateAssetsForCodeFlowTests : UpdateAssetsPullRequestUpdaterTest
         newBuild.Commit = "sha456";
 
         WithExistingCodeFlowStatus(oldBuild);
-        WithExistingPullRequest(oldBuild, canUpdate: true);
 
-        await WhenUpdateAssetsAsyncIsCalled(newBuild);
+        using (WithExistingPullRequest(oldBuild, canUpdate: true))
+        {
+            await WhenUpdateAssetsAsyncIsCalled(newBuild);
 
-        ThenShouldHaveInProgressPullRequestState(newBuild);
-        AndCodeShouldHaveBeenFlownForward(newBuild);
-        AndShouldHaveCodeFlowState(newBuild, InProgressPrHeadBranch);
-        AndShouldHavePullRequestCheckReminder(newBuild);
+            ThenShouldHaveInProgressPullRequestState(newBuild);
+            AndCodeShouldHaveBeenFlownForward(newBuild);
+            AndShouldHaveCodeFlowState(newBuild, InProgressPrHeadBranch);
+            AndShouldHavePullRequestCheckReminder(newBuild);
+        }
     }
 
     protected override void ThenShouldHavePendingUpdateState(Build forBuild, bool _ = false)
