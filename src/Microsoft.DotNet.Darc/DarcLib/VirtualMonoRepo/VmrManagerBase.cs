@@ -142,7 +142,7 @@ public abstract class VmrManagerBase
         // TODO: Workaround for cases when we get CRLF problems on Windows
         // We should figure out why restoring and reapplying VMR patches leaves working tree with EOL changes
         // https://github.com/dotnet/arcade-services/issues/3277
-        if (restoreVmrPatches && vmrPatchesToRestore.Any() && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (restoreVmrPatches && vmrPatchesToRestore.Any())
         {
             cancellationToken.ThrowIfCancellationRequested();
             await _localGitClient.CheckoutAsync(_vmrInfo.VmrPath, ".");

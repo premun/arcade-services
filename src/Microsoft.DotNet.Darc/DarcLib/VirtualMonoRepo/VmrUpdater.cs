@@ -475,33 +475,25 @@ public class VmrUpdater : VmrManagerBase, IVmrUpdater
             throw;
         }
 
-        // TODO: Workaround for cases when we get CRLF problems on Windows
-        // We should figure out why restoring and reapplying VMR patches leaves working tree with EOL changes
-        // https://github.com/dotnet/arcade-services/issues/3277
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        var vmr = GetLocalVmr();
+        if (await vmr.HasWorkingTreeChangesAsync())
         {
             cancellationToken.ThrowIfCancellationRequested();
+            await _localGitClient.CheckoutAsync(_vmrInfo.VmrPath, ".");
 
-            var vmr = GetLocalVmr();
+            // Sometimes not even checkout helps, so we check again
             if (await vmr.HasWorkingTreeChangesAsync())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                await _localGitClient.CheckoutAsync(_vmrInfo.VmrPath, ".");
+                await _localGitClient.RunGitCommandAsync(
+                    _vmrInfo.VmrPath,
+                    ["add", "--u", "."],
+                    cancellationToken: default);
 
-                // Sometimes not even checkout helps, so we check again
-                if (await vmr.HasWorkingTreeChangesAsync())
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    await _localGitClient.RunGitCommandAsync(
-                        _vmrInfo.VmrPath,
-                        ["add", "--u", "."],
-                        cancellationToken: default);
-
-                    await _localGitClient.RunGitCommandAsync(
-                        _vmrInfo.VmrPath,
-                        ["commit", "--amend", "--no-edit"],
-                        cancellationToken: default);
-                }
+                await _localGitClient.RunGitCommandAsync(
+                    _vmrInfo.VmrPath,
+                    ["commit", "--amend", "--no-edit"],
+                    cancellationToken: default);
             }
         }
     }
