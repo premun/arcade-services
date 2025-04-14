@@ -1,8 +1,10 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Runtime.InteropServices;
 using Azure.Core;
 using Azure.Identity;
+using Azure.Identity.Broker;
 
 namespace Maestro.Common.AppCredentials;
 
@@ -42,14 +44,14 @@ public class AppCredential : TokenCredential
     /// Use this for user-based flows.
     /// </summary>
     public static AppCredential CreateUserCredential(string appId, string userScope = ".default")
-        => CreateUserCredential(appId, new TokenRequestContext([$"api://{appId}/{userScope}"]));
+        => CreateUserCredential(appId, new TokenRequestContext([appId]));
 
     /// <summary>
     /// Use this for user-based flows.
     /// </summary>
     public static AppCredential CreateUserCredential(string appId, TokenRequestContext requestContext)
     {
-        var authRecordPath = Path.Combine(AUTH_CACHE, $"{AUTH_RECORD_PREFIX}-{appId}");
+        var authRecordPath = Path.Combine(AUTH_CACHE, $"{AUTH_RECORD_PREFIX}-{appId}-2"); // TODO: Revert
         var credential = GetInteractiveCredential(appId, authRecordPath);
 
         return new AppCredential(credential, requestContext);
@@ -61,16 +63,23 @@ public class AppCredential : TokenCredential
     /// </summary>
     private static CachedInteractiveBrowserCredential GetInteractiveCredential(string appId, string authRecordPath)
     {
-        // This is a usual configuration for a credential obtained against an entra app through a browser sign-in
-        var credentialOptions = new InteractiveBrowserCredentialOptions
+        InteractiveBrowserCredentialOptions credentialOptions;
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            TenantId = TENANT_ID,
-            ClientId = appId,
-            // These options describe credential caching only during runtime
-            TokenCachePersistenceOptions = new TokenCachePersistenceOptions()
-            {
-                Name = "maestro"
-            },
+            // On windows, we use the brokered credential to get a better experience
+            // https://learn.microsoft.com/en-us/entra/msal/dotnet/acquiring-tokens/desktop-mobile/wam
+            credentialOptions = new InteractiveBrowserCredentialBrokerOptions(GetConsoleOrTerminalWindow());
+        }
+        else
+        {
+            credentialOptions = new InteractiveBrowserCredentialOptions();
+        }
+
+        credentialOptions.TenantId = TENANT_ID;
+        credentialOptions.ClientId = appId;
+        credentialOptions.TokenCachePersistenceOptions = new TokenCachePersistenceOptions()
+        {
+            Name = "maestro"
         };
 
         return new CachedInteractiveBrowserCredential(credentialOptions, authRecordPath);
@@ -104,4 +113,38 @@ public class AppCredential : TokenCredential
         var credential = new AzureCliCredential();
         return new AppCredential(credential, requestContext);
     }
+
+    #region Win32 APIs needed for interactive sign-in
+
+    enum GetAncestorFlags
+    {
+        GetParent = 1,
+        GetRoot = 2,
+        /// <summary>
+        /// Retrieves the owned root window by walking the chain of parent and owner windows returned by GetParent.
+        /// </summary>
+        GetRootOwner = 3
+    }
+
+    /// <summary>
+    /// Retrieves the handle to the ancestor of the specified window.
+    /// </summary>
+    /// <param name="hwnd">A handle to the window whose ancestor is to be retrieved.
+    /// If this parameter is the desktop window, the function returns NULL. </param>
+    /// <param name="flags">The ancestor to be retrieved.</param>
+    /// <returns>The return value is the handle to the ancestor window.</returns>
+    [DllImport("user32.dll", ExactSpelling = true)]
+    static extern IntPtr GetAncestor(IntPtr hwnd, GetAncestorFlags flags);
+
+    [DllImport("kernel32.dll")]
+    static extern IntPtr GetConsoleWindow();
+
+    // This is your window handle!
+    public static IntPtr GetConsoleOrTerminalWindow()
+    {
+        IntPtr consoleHandle = GetConsoleWindow();
+        return GetAncestor(consoleHandle, GetAncestorFlags.GetRootOwner);
+    }
+
+    #endregion
 }
