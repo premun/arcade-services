@@ -1,7 +1,7 @@
 # See https://aka.ms/customizecontainer to learn how to customize your debug container and how Visual Studio uses this Dockerfile to build your images for faster debugging.
 
 # Build .NET apps
-FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine3.20 AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0-alpine3.21 AS build
 ARG BUILD_CONFIGURATION=Release
 ARG PACKAGE_VERSION="0.0.99-dev"
 
@@ -62,7 +62,7 @@ RUN dotnet build -c $BUILD_CONFIGURATION -o /app/build --no-restore
 RUN dotnet publish -c $BUILD_CONFIGURATION -o /app/publish/SubscriptionTriggerer /p:UseAppHost=false /p:Version=${PACKAGE_VERSION}
 
 # Copy everything to the final image
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine3.20
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine3.21
 RUN apk add --no-cache git icu-libs
 RUN git config --global user.email "dotnet-maestro[bot]@users.noreply.github.com" \
  && git config --global user.name "dotnet-maestro[bot]" \
