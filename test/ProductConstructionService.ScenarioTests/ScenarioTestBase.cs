@@ -1171,4 +1171,23 @@ internal abstract partial class ScenarioTestBase
         pr.MergeableState.ToString().Should().Be("dirty", "PR " + pr.HtmlUrl + " should be dirty");
         return pr;
     }
+
+    protected static async Task MergeRemoteBranchesAsync(string branchToMerge, string targetBranch)
+    {
+        TestContext.WriteLine($"Merging {branchToMerge} into {targetBranch}");
+        await CheckoutRemoteRefAsync(targetBranch);
+
+        try
+        {
+            await RunGitAsync("merge", "--no-commit", "--no-ff", branchToMerge);
+            throw new ScenarioTestException("Expected a merge to fail because of a conflict");
+        }
+        catch (ScenarioTestException e) when (e.Data["ConsoleOutput"] is string output && output.Contains("Merge conflict"))
+        {
+            await RunGitAsync("checkout", "--ours", ".");
+            await GitAddAllAsync();
+            await GitCommitAsync("Resolve merge conflict using ours");
+        }
+        await RunGitAsync("push", "origin", targetBranch);
+    }
 }

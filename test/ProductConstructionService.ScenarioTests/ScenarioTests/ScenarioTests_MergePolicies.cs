@@ -62,7 +62,7 @@ internal class ScenarioTests_MergePolicies : ScenarioTestBase
         await AutoMergeFlowTestBase(TargetRepo, SourceRepo, targetBranch, testChannelName, ["--no-requested-changes"]);
     }
 
-    public async Task AutoMergeFlowTestBase(string targetRepo, string sourceRepo, string targetBranch, string testChannelName, List<string> args)
+    private async Task AutoMergeFlowTestBase(string targetRepo, string sourceRepo, string targetBranch, string testChannelName, List<string> args)
     {
         var targetRepoUri = GetGitHubRepoUrl(targetRepo);
         var sourceRepoUri = GetGitHubRepoUrl(sourceRepo);

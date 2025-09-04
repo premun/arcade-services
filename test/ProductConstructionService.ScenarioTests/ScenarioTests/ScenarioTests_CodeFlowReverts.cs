@@ -1,6 +1,7 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using Kusto.Data.Common;
 using Microsoft.DotNet.DarcLib.Helpers;
 using Microsoft.DotNet.DarcLib.VirtualMonoRepo;
 using Microsoft.DotNet.ProductConstructionService.Client.Models;
@@ -188,39 +189,16 @@ internal partial class ScenarioTests_CodeFlow : CodeFlowScenarioTestBase
 
                         TestContext.WriteLine("Waiting for conflict comment to show up on the PR");
                         pr = await WaitForPullRequestComment(TestRepository.VmrTestRepoName, targetBranchName, "conflict");
-                        await CheckIfPullRequestCommentExists(
-                            TestRepository.VmrTestRepoName,
-                            pr,
-                            [
-                                $"`{FileInConflictName}` - [🔍 View in {TestRepository.TestOrg}/{TestRepository.TestRepo1Name}](https://github.com/{TestRepository.TestOrg}/{TestRepository.TestRepo1Name}/blob/{repoSha}/{FileInConflictName})" +
-                                $" / [🔍 View in VMR](https://github.com/{TestRepository.TestOrg}/{TestRepository.VmrTestRepoName}/blob/{pr.Head.Ref}/src/{TestRepository.TestRepo1Name}/{FileInConflictName}",
-                            ]);
 
                         // TODO: Wait for the new Maestro check to appear
-                        // TODO: Merge the target branch into the PR branch
+
+                        // Merge the target branch into the PR branch
+                        using (ChangeDirectory(vmrDirectory.Directory))
+                        {
+                            await MergeRemoteBranchesAsync(targetBranchName, pr.Head.Ref);
+                        }
+
                         // TODO: Wait for the Maestro check to go green and a comment to appear
-
-                        //using (ChangeDirectory(vmrDirectory.Directory))
-                        //{
-                        //    TestContext.WriteLine();
-                        //    await CheckoutRemoteRefAsync(pr.Head.Ref);
-                        //    await RunGitAsync("revert", (await GitGetCurrentSha()).TrimEnd());
-                        //    await RunGitAsync("push", "origin", pr.Head.Ref);
-                        //}
-
-                        //using (ChangeDirectory(reposFolder.Directory))
-                        //{
-                        //    await WaitForNewCommitInPullRequest(TestRepository.VmrTestRepoName, pr, 5);
-                        //    await CheckForwardFlowGitHubPullRequest(
-                        //        [(TestRepository.TestRepo1Name, (await GitGetCurrentSha()).TrimEnd())],
-                        //        TestRepository.VmrTestRepoName,
-                        //        targetBranchName,
-                        //        [
-                        //            $"src/{TestRepository.TestRepo1Name}/{TestFile1Name}",
-                        //    $"src/{TestRepository.TestRepo1Name}/{TestFile2Name}"
-                        //        ],
-                        //        TestFilePatches);
-                        //}
                     }
                 }
             }
