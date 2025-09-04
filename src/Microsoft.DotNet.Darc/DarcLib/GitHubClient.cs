@@ -472,14 +472,16 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     {
         (string owner, string repo, int id) = ParsePullRequestUri(pullRequestUrl);
         var client = GetClient(owner, repo);
+
         // Get the sha of the latest commit for the current PR
         string prSha = (await client.PullRequest.Get(owner, repo, id))?.Head?.Sha
             ?? throw new InvalidOperationException("We cannot find the sha of the pull request");
 
         // Get a list of all the merge policies checks runs for the current PR
-        List<CheckRun> existingChecksRuns =
-            (await client.Check.Run.GetAllForReference(owner, repo, prSha))
-            .CheckRuns.Where(e => e.ExternalId.StartsWith(MergePolicyConstants.MaestroMergePolicyCheckRunPrefix)).ToList();
+        List<CheckRun> existingChecksRuns = (await client.Check.Run.GetAllForReference(owner, repo, prSha))
+            .CheckRuns
+            .Where(e => e.ExternalId.StartsWith(MergePolicyConstants.MaestroMergePolicyCheckRunPrefix))
+            .ToList();
 
         var toBeAdded = evaluations.Where(e => existingChecksRuns.All(c => c.ExternalId != CheckRunId(e, prSha)));
         var toBeUpdated = existingChecksRuns.Where(c => evaluations.Any(e => c.ExternalId == CheckRunId(e, prSha)));
@@ -489,6 +491,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
         {
             await client.Check.Run.Create(owner, repo, CheckRunForAdd(newCheckRunValidation, prSha));
         }
+
         foreach (var updatedCheckRun in toBeUpdated)
         {
             MergePolicyEvaluationResult eval = evaluations.Last(e => updatedCheckRun.ExternalId == CheckRunId(e, prSha));
@@ -501,6 +504,7 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
             CheckRunUpdate newCheckRunUpdateValidation = CheckRunForUpdate(eval);
             await client.Check.Run.Update(owner, repo, updatedCheckRun.Id, newCheckRunUpdateValidation);
         }
+
         foreach (var deletedCheckRun in toBeDeleted)
         {
             await client.Check.Run.Update(owner, repo, deletedCheckRun.Id, CheckRunForDelete(deletedCheckRun));
@@ -527,7 +531,6 @@ public class GitHubClient : RemoteRepoBase, IRemoteGitRepo
     /// <summary>
     ///     Update a check run based on a NewCheckRun and evaluation
     /// </summary>
-    /// <param name="newCheckRun">The NewCheckRun that needs to be updated</param>
     /// <param name="eval">The result of that updated check run</param>
     /// <returns>The updated CheckRun</returns>
     private static CheckRunUpdate CheckRunForUpdate(MergePolicyEvaluationResult eval)
