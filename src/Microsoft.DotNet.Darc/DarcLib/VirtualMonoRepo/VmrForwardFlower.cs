@@ -114,7 +114,7 @@ public class VmrForwardFlower : VmrCodeFlower, IVmrForwardFlower
 
         ForwardFlow currentFlow = new(build.Commit, lastFlows.LastFlow.VmrSha);
 
-        bool hasChanges = await FlowCodeAsync(
+        (bool hasChanges, bool previousFlowRecreated) = await FlowCodeAsync(
             lastFlows,
             currentFlow,
             sourceRepo,
@@ -151,6 +151,7 @@ public class VmrForwardFlower : VmrCodeFlower, IVmrForwardFlower
 
         return new CodeFlowResult(
             hasChanges,
+            previousFlowRecreated,
             conflictedFiles ?? [],
             sourceRepo.Path,
             DependencyUpdates: []);
@@ -213,7 +214,7 @@ public class VmrForwardFlower : VmrCodeFlower, IVmrForwardFlower
         }
     }
 
-    protected override async Task<bool> SameDirectionFlowAsync(
+    protected override async Task<(bool HadChanges, bool PreviousFlowRecreated)> SameDirectionFlowAsync(
         SourceMapping mapping,
         LastFlows lastFlows,
         Codeflow currentFlow,
@@ -227,12 +228,14 @@ public class VmrForwardFlower : VmrCodeFlower, IVmrForwardFlower
     {
         try
         {
-            return await _vmrUpdater.UpdateRepository(
+            bool hadChanges = await _vmrUpdater.UpdateRepository(
                 mapping,
                 build,
                 additionalFileExclusions: [.. DependencyFileManager.CodeflowDependencyFiles],
                 resetToRemoteWhenCloningRepo: ShouldResetClones,
                 cancellationToken: cancellationToken);
+
+            return (hadChanges, PreviousFlowRecreated: false);
         }
         catch (PatchApplicationFailedException e)
         {
@@ -273,7 +276,7 @@ public class VmrForwardFlower : VmrCodeFlower, IVmrForwardFlower
                 await _localGitClient.CommitAmendAsync(_vmrInfo.VmrPath, cancellationToken);
             }
 
-            return hadChanges;
+            return (hadChanges, PreviousFlowRecreated: true);
         }
     }
 

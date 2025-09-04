@@ -116,7 +116,7 @@ internal abstract class CodeFlowOperation(
 
             try
             {
-                hasChanges = await _codeFlower.FlowCodeAsync(
+                (hasChanges, _) = await _codeFlower.FlowCodeAsync(
                     lastFlows,
                     currentFlow,
                     productRepo,

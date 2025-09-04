@@ -1154,6 +1154,12 @@ internal abstract class PullRequestUpdater : IPullRequestUpdater
             }
 
             await RegisterSubscriptionUpdateAction(SubscriptionUpdateAction.ApplyingUpdates, update.SubscriptionId);
+
+            if (codeFlowRes.PreviousFlowRecreated)
+            {
+                _logger.LogInformation("There was a conflict detected during the current flow and a previous code flow was recreated. Registering a revert check...");
+                _
+            }
         }
         else
         {

@@ -22,7 +22,7 @@ public interface IVmrCodeFlower
         ILocalGitRepo repoClone,
         bool currentIsBackflow);
 
-    Task<bool> FlowCodeAsync(
+    Task<(bool, bool)> FlowCodeAsync(
         LastFlows lastFlows,
         Codeflow currentFlow,
         ILocalGitRepo repo,
@@ -76,7 +76,7 @@ public abstract class VmrCodeFlower : IVmrCodeFlower
     /// https://github.com/dotnet/dotnet/tree/main/docs/VMR-Full-Code-Flow.md#the-code-flow-algorithm
     /// </summary>
     /// <returns>True if there were changes to flow</returns>
-    public async Task<bool> FlowCodeAsync(
+    public async Task<(bool, bool)> FlowCodeAsync(
         LastFlows lastFlows,
         Codeflow currentFlow,
         ILocalGitRepo repo,
@@ -92,7 +92,7 @@ public abstract class VmrCodeFlower : IVmrCodeFlower
         if (lastFlow.SourceSha == currentFlow.SourceSha)
         {
             _logger.LogInformation("No new commits to flow from {sourceRepo}", currentFlow is Backflow ? "VMR" : mapping.Name);
-            return false;
+            return (false, false);
         }
 
         await EnsureCodeflowLinearityAsync(repo, currentFlow, lastFlows);
@@ -103,10 +103,11 @@ public abstract class VmrCodeFlower : IVmrCodeFlower
             lastFlow.TargetSha);
 
         bool hasChanges;
+        bool previousFlowRecreated = false;
         if (lastFlow.Name == currentFlow.Name)
         {
             _logger.LogInformation("Current flow is in the same direction");
-            hasChanges = await SameDirectionFlowAsync(
+            (hasChanges, previousFlowRecreated) = await SameDirectionFlowAsync(
                 mapping,
                 lastFlows,
                 currentFlow,
@@ -138,7 +139,7 @@ public abstract class VmrCodeFlower : IVmrCodeFlower
             _logger.LogInformation("Nothing to flow from {sourceRepo}", currentFlow is Backflow ? "VMR" : mapping.Name);
         }
 
-        return hasChanges;
+        return (hasChanges, previousFlowRecreated);
     }
 
     /// <summary>
@@ -154,8 +155,8 @@ public abstract class VmrCodeFlower : IVmrCodeFlower
     /// <param name="targetBranch">Target branch to create the PR against. If target branch does not exist, it is created off of this branch</param>
     /// <param name="headBranch">New/existing branch to make the changes on</param>
     /// <param name="headBranchExisted">Did we just create the headbranch or are we updating an existing one?</param>
-    /// <returns>True if there were changes to flow</returns>
-    protected abstract Task<bool> SameDirectionFlowAsync(
+    /// <returns>Whether there were changes to flow and whether we had to deal with a conflict</returns>
+    protected abstract Task<(bool HadChanges, bool PreviousFlowRecreated)> SameDirectionFlowAsync(
         SourceMapping mapping,
         LastFlows lastFlows,
         Codeflow currentFlow,

@@ -126,7 +126,7 @@ public class VmrBackFlower : VmrCodeFlower, IVmrBackFlower
         CancellationToken cancellationToken)
     {
         var currentFlow = new Backflow(build.Commit, lastFlows.LastFlow.RepoSha);
-        var hasChanges = await FlowCodeAsync(
+        var (hadChanges, previousFlowRecreated) = await FlowCodeAsync(
             lastFlows,
             currentFlow,
             targetRepo,
@@ -152,13 +152,14 @@ public class VmrBackFlower : VmrCodeFlower, IVmrBackFlower
             cancellationToken);
 
         return new CodeFlowResult(
-            hasChanges || mergeResult.DependencyUpdates.Count > 0,
+            hadChanges || mergeResult.DependencyUpdates.Count > 0,
+            previousFlowRecreated,
             mergeResult.ConflictedFiles,
             targetRepo.Path,
             mergeResult.DependencyUpdates);
     }
 
-    protected override async Task<bool> SameDirectionFlowAsync(
+    protected override async Task<(bool HadChanges, bool PreviousFlowRecreated)> SameDirectionFlowAsync(
         SourceMapping mapping,
         LastFlows lastFlows,
         Codeflow currentFlow,
@@ -204,13 +205,14 @@ public class VmrBackFlower : VmrCodeFlower, IVmrBackFlower
                 }
             }
 
-            return false;
+            return (false, false);
         }
 
         _logger.LogInformation("Created {count} patch(es)", patches.Count);
 
         string newBranchName = currentFlow.GetBranchName();
         IWorkBranch? workBranch = await _workBranchFactory.CreateWorkBranchAsync(targetRepo, newBranchName, headBranch);
+        bool previousFlowRecreated = false;
 
         try
         {
@@ -227,6 +229,7 @@ public class VmrBackFlower : VmrCodeFlower, IVmrBackFlower
         catch (PatchApplicationFailedException e)
         {
             _logger.LogInformation(e.Message);
+            previousFlowRecreated = true;
 
             // When we are updating an already existing PR branch, there can be conflicting changes in the PR from devs.
             // In that case we want to throw as that is a conflict we don't want to try to resolve.
@@ -270,7 +273,7 @@ public class VmrBackFlower : VmrCodeFlower, IVmrBackFlower
             workBranch,
             cancellationToken);
 
-        return true;
+        return (HadChanges: true, previousFlowRecreated);
     }
 
     protected override async Task<bool> OppositeDirectionFlowAsync(
