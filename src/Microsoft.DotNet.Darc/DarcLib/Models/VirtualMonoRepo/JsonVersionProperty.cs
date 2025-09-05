@@ -52,7 +52,7 @@ public class JsonVersionProperty : IVersionFileProperty
 
         if (repoProp.Value.GetType() == typeof(List<string>))
         {
-            throw new ArgumentException($"Cannot compare properties with {nameof(List<string>)} values.");
+            throw new ArgumentException($"Cannot compare properties with array of values for property {repoProp.Name}.");
         }
 
         if (repoProp.Value.GetType() == typeof(bool))
