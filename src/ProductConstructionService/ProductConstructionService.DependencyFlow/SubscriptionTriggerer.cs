@@ -3,11 +3,10 @@
 
 using Maestro.Data;
 using Maestro.Data.Models;
-using Microsoft.EntityFrameworkCore;
+using Maestro.Data.Services;
 using Microsoft.Extensions.Logging;
 using ProductConstructionService.Common;
 using ProductConstructionService.DependencyFlow.Model;
-using Asset = ProductConstructionService.DependencyFlow.Model.Asset;
 
 namespace ProductConstructionService.DependencyFlow;
 
@@ -16,17 +15,20 @@ internal class SubscriptionTriggerer : ISubscriptionTriggerer
     private readonly IPullRequestUpdaterFactory _updaterFactory;
     private readonly IRedisCacheFactory _cacheFactory;
     private readonly BuildAssetRegistryContext _context;
+    private readonly ISubscriptionService _subscriptionService;
     private readonly ILogger<SubscriptionTriggerer> _logger;
     private readonly Guid _subscriptionId;
 
     public SubscriptionTriggerer(
         BuildAssetRegistryContext context,
+        ISubscriptionService subscriptionService,
         IPullRequestUpdaterFactory updaterFactory,
         IRedisCacheFactory cacheFactory,
         ILogger<SubscriptionTriggerer> logger,
         Guid subscriptionId)
     {
         _context = context;
+        _subscriptionService = subscriptionService;
         _updaterFactory = updaterFactory;
         _cacheFactory = cacheFactory;
         _logger = logger;
@@ -36,13 +38,12 @@ internal class SubscriptionTriggerer : ISubscriptionTriggerer
     public async Task<bool> UpdateForMergedPullRequestAsync(int updateBuildId)
     {
         _logger.LogInformation("Updating {subscriptionId} with latest build id {buildId}", _subscriptionId, updateBuildId);
-        Subscription? subscription = await _context.Subscriptions.FindAsync(_subscriptionId);
+        Subscription? subscription = await _subscriptionService.GetSubscriptionAsync(_subscriptionId);
 
         if (subscription != null)
         {
             subscription.LastAppliedBuildId = updateBuildId;
-            _context.Subscriptions.Update(subscription);
-            await _context.SaveChangesAsync();
+            await _subscriptionService.UpdateSubscriptionAsync(subscription);
             return true;
         }
         else
@@ -71,7 +72,7 @@ internal class SubscriptionTriggerer : ISubscriptionTriggerer
             updateReason,
             flowType);
 
-        Subscription? subscription = await _context.Subscriptions.FindAsync(_subscriptionId);
+        Subscription? subscription = await _subscriptionService.GetSubscriptionAsync(_subscriptionId);
         if (subscription != null)
         {
             var dfe = new DependencyFlowEvent
@@ -99,7 +100,7 @@ internal class SubscriptionTriggerer : ISubscriptionTriggerer
 
     public async Task UpdateSubscriptionAsync(int buildId, bool force = false)
     {
-        Subscription? subscription = await _context.Subscriptions.FindAsync(_subscriptionId);
+        Subscription? subscription = await _subscriptionService.GetSubscriptionAsync(_subscriptionId);
 
         if (subscription == null)
         {

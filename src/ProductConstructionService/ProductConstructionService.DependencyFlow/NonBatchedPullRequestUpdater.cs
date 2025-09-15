@@ -3,6 +3,7 @@
 
 using Maestro.Data;
 using Maestro.Data.Models;
+using Maestro.Data.Services;
 using Maestro.DataProviders;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.DarcLib.VirtualMonoRepo;
@@ -16,7 +17,7 @@ internal class NonBatchedPullRequestUpdater : PullRequestUpdater
 {
     private readonly Lazy<Task<Subscription?>> _lazySubscription;
     private readonly NonBatchedPullRequestUpdaterId _id;
-    private readonly BuildAssetRegistryContext _context;
+    private readonly ISubscriptionService _subscriptionService;
     private readonly ILogger<NonBatchedPullRequestUpdater> _logger;
     private readonly ICommentCollector _commentCollector;
     private readonly IPullRequestCommentBuilder _commentBuilder;
@@ -24,7 +25,7 @@ internal class NonBatchedPullRequestUpdater : PullRequestUpdater
     public NonBatchedPullRequestUpdater(
         NonBatchedPullRequestUpdaterId id,
         IMergePolicyEvaluator mergePolicyEvaluator,
-        BuildAssetRegistryContext context,
+        ISubscriptionService subscriptionService,
         IRemoteFactory remoteFactory,
         IPullRequestUpdaterFactory updaterFactory,
         ICoherencyUpdateResolver coherencyUpdateResolver,
@@ -62,7 +63,7 @@ internal class NonBatchedPullRequestUpdater : PullRequestUpdater
     {
         _lazySubscription = new Lazy<Task<Subscription?>>(RetrieveSubscription);
         _id = id;
-        _context = context;
+        _subscriptionService = subscriptionService;
         _logger = logger;
         _commentCollector = commentCollector;
         _commentBuilder = commentBuilder;
@@ -72,7 +73,7 @@ internal class NonBatchedPullRequestUpdater : PullRequestUpdater
 
     private async Task<Subscription?> RetrieveSubscription()
     {
-        Subscription? subscription = await _context.Subscriptions.FindAsync(SubscriptionId);
+        Subscription? subscription = await _subscriptionService.GetSubscriptionAsync(SubscriptionId);
 
         // This can mainly happen during E2E tests where we delete a subscription
         // while some PRs have just been closed and there's a reminder on those still

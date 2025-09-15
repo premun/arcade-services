@@ -2,7 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,7 +9,6 @@ using EntityFrameworkCore.Triggers;
 using Maestro.Data.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
@@ -56,7 +54,6 @@ public class BuildAssetRegistryContext(DbContextOptions options)
     public DbSet<BuildDependency> BuildDependencies { get; set; }
     public DbSet<Channel> Channels { get; set; }
     public DbSet<DefaultChannel> DefaultChannels { get; set; }
-    public DbSet<Subscription> Subscriptions { get; set; }
     public DbSet<SubscriptionUpdate> SubscriptionUpdates { get; set; }
     public DbSet<Repository> Repositories { get; set; }
     public DbSet<RepositoryBranch> RepositoryBranches { get; set; }
@@ -275,99 +272,6 @@ public class BuildAssetRegistryContext(DbContextOptions options)
         return Repositories.Where(r => r.RepositoryName == repositoryUrl)
             .Select(r => r.InstallationId)
             .FirstOrDefaultAsync();
-    }
-
-    public async Task<IList<Build>> GetBuildGraphAsync(int buildId)
-    {
-        var dependencyEntity = Model.FindEntityType(typeof(BuildDependency));
-        // The "new" code is much more complicated and might not return what we need, suppress the warning
-#pragma warning disable CS0618
-        var buildIdColumnName = dependencyEntity.FindProperty(nameof(BuildDependency.BuildId)).GetColumnName();
-        var dependencyIdColumnName = dependencyEntity.FindProperty(nameof(BuildDependency.DependentBuildId)).GetColumnName();
-        var isProductColumnName = dependencyEntity.FindProperty(nameof(BuildDependency.IsProduct)).GetColumnName();
-        var timeToInclusionInMinutesColumnName = dependencyEntity.FindProperty(nameof(BuildDependency.TimeToInclusionInMinutes)).GetColumnName();
-#pragma warning restore CS0618
-        var edgeTable = dependencyEntity.GetTableName();
-
-        var edges = BuildDependencies.FromSqlRaw($@"
-WITH traverse AS (
-        SELECT
-            {buildIdColumnName},
-            {dependencyIdColumnName},
-            {isProductColumnName},
-            {timeToInclusionInMinutesColumnName},
-            0 as Depth
-        from {edgeTable}
-        WHERE {buildIdColumnName} = @id
-    UNION ALL
-        SELECT
-            {edgeTable}.{buildIdColumnName},
-            {edgeTable}.{dependencyIdColumnName},
-            {edgeTable}.{isProductColumnName},
-            {edgeTable}.{timeToInclusionInMinutesColumnName},
-            traverse.Depth + 1
-        FROM {edgeTable}
-        INNER JOIN traverse
-        ON {edgeTable}.{buildIdColumnName} = traverse.{dependencyIdColumnName}
-        WHERE traverse.{isProductColumnName} = 1 -- The thing we previously traversed was a product dependency
-            AND traverse.Depth < 10 -- Don't load all the way back because of incorrect isProduct columns
-)
-SELECT DISTINCT {buildIdColumnName}, {dependencyIdColumnName}, {isProductColumnName}, {timeToInclusionInMinutesColumnName}
-FROM traverse;",
-            new SqlParameter("id", buildId));
-
-        List<BuildDependency> things = await edges.ToListAsync();
-        var buildIds = new HashSet<int>(things.SelectMany(t => new[] { t.BuildId, t.DependentBuildId }))
-        {
-            buildId // Make sure we always include the requested build, even if it has no edges.
-        };
-
-        IQueryable<Build> builds = from build in Builds
-                                   where buildIds.Contains(build.Id)
-                                   select build;
-
-        Dictionary<int, Build> dict = await builds.ToDictionaryAsync(b => b.Id,
-            b =>
-            {
-                b.DependentBuildIds = [];
-                return b;
-            });
-
-        foreach (var edge in things)
-        {
-            dict[edge.BuildId].DependentBuildIds.Add(edge);
-        }
-
-        // Gather subscriptions used by this build.
-        Build primaryBuild = Builds.First(b => b.Id == buildId);
-
-        var validSubscriptions = await Subscriptions.Where(s =>
-                (s.TargetRepository == primaryBuild.AzureDevOpsRepository ||
-                 s.TargetRepository == primaryBuild.GitHubRepository) &&
-                (s.TargetBranch == primaryBuild.AzureDevOpsBranch ||
-                 s.TargetBranch == primaryBuild.GitHubBranch ||
-                 "refs/heads/" + s.TargetBranch == primaryBuild.AzureDevOpsBranch ||
-                 "refs/heads/" + s.TargetBranch == primaryBuild.GitHubBranch))
-            .ToListAsync();
-
-        // Use the subscriptions to determine what channels are relevant for this build, so just grab the unique channel ID's from valid suscriptions
-        var channelIds = validSubscriptions.GroupBy(x => x.ChannelId).Select(y => y.First()).Select(s => s.ChannelId);
-
-        // Acquire list of builds in valid channels
-        var channelBuildIds = await BuildChannels.Where(b => channelIds.Any(c => c == b.ChannelId)).Select(s => s.BuildId).ToListAsync();
-        var possibleBuilds = await Builds.Where(b => channelBuildIds.Any(c => c == b.Id)).ToListAsync();
-
-        // Calculate total number of builds that are newer.
-        foreach (var id in dict.Keys)
-        {
-            var build = dict[id];
-            // Get newer builds data for this channel.
-            var newer = possibleBuilds.Where(b => b.GitHubRepository == build.GitHubRepository &&
-                                                  b.AzureDevOpsRepository == build.AzureDevOpsRepository &&
-                                                  b.DateProduced > build.DateProduced);
-            dict[id].Staleness = newer.Count();
-        }
-        return [.. dict.Values];
     }
 
     public bool IsProductDependency(

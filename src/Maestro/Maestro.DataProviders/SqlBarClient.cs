@@ -2,7 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Maestro.Data;
-using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.Kusto;
 using Microsoft.DotNet.ProductConstructionService.Client.Models;
 using Microsoft.DotNet.Services.Utility;
@@ -13,6 +12,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.DotNet.DarcLib.Models.Darc;
+using Maestro.Data.Services;
 
 namespace Maestro.DataProviders;
 
@@ -23,20 +23,21 @@ public class SqlBarClient : ISqlBarClient
 {
     private readonly BuildAssetRegistryContext _context;
     private readonly IKustoClientProvider _kustoClientProvider;
+    private readonly ISubscriptionService _subscriptionService;
 
     public SqlBarClient(
         BuildAssetRegistryContext context,
-        IKustoClientProvider kustoClientProvider)
+        IKustoClientProvider kustoClientProvider,
+        ISubscriptionService subscriptionService)
     {
         _context = context;
         _kustoClientProvider = kustoClientProvider;
+        _subscriptionService = subscriptionService;
     }
 
     public async Task<Subscription> GetSubscriptionAsync(Guid subscriptionId)
     {
-        var sub = await _context.Subscriptions
-            .Include(s => s.ExcludedAssets)
-            .FirstOrDefaultAsync(s => s.Id.Equals(subscriptionId));
+        var sub = await _subscriptionService.GetSubscriptionAsync(subscriptionId);
 
         if (sub == null)
         {
@@ -53,7 +54,7 @@ public class SqlBarClient : ISqlBarClient
             sub.SourceDirectory,
             sub.TargetDirectory,
             sub.PullRequestFailureNotificationTags,
-            sub.ExcludedAssets.Select(s => s.Filter).ToList());
+            sub.ExcludedAssets?.Select(a => a.Filter).ToList() ?? []);
     }
 
     public async Task<Subscription> GetSubscriptionAsync(string subscriptionId)
@@ -350,43 +351,10 @@ public class SqlBarClient : ISqlBarClient
         string sourceDirectory = null,
         string targetDirectory = null)
     {
-        IQueryable<Data.Models.Subscription> query = _context.Subscriptions
-            .Include(s => s.Channel)
-            .Include(s => s.LastAppliedBuild);
+        var subscriptions = await _subscriptionService.GetSubscriptionsAsync(
+            sourceRepo, targetRepo, channelId, sourceEnabled, sourceDirectory, targetDirectory);
 
-        if (!string.IsNullOrEmpty(sourceRepo))
-        {
-            query = query.Where(sub => sub.SourceRepository == sourceRepo);
-        }
-
-        if (!string.IsNullOrEmpty(targetRepo))
-        {
-            query = query.Where(sub => sub.TargetRepository == targetRepo);
-        }
-
-        if (channelId.HasValue)
-        {
-            query = query.Where(sub => sub.ChannelId == channelId.Value);
-        }
-
-        if (sourceEnabled.HasValue)
-        {
-            query = query.Where(sub => sub.SourceEnabled == sourceEnabled.Value);
-        }
-
-        if (!string.IsNullOrEmpty(sourceDirectory))
-        {
-            query = query.Where(sub => sub.SourceDirectory == sourceDirectory);
-        }
-
-        if (!string.IsNullOrEmpty(targetDirectory))
-        {
-            query = query.Where(sub => sub.TargetDirectory == targetDirectory);
-        }
-
-        List<Data.Models.Subscription> results = await query.ToListAsync();
-
-        return results.Select(ToClientModelSubscription);
+        return subscriptions.Select(ToClientModelSubscription);
     }
 
     public async Task<Build> GetBuildAsync(int buildId)
@@ -498,22 +466,19 @@ public class SqlBarClient : ISqlBarClient
         Guid subscriptionId,
         string updateMessage)
     {
-        Data.Models.Subscription subscription = await _context.Subscriptions.FindAsync(subscriptionId);
-        Data.Models.SubscriptionUpdate subscriptionUpdate = new()
+        var subscription = await _subscriptionService.GetSubscriptionAsync(subscriptionId);
+        if (subscription == null)
+        {
+            throw new InvalidOperationException($"Subscription {subscriptionId} not found");
+        }
+
+        var subscriptionUpdate = new Data.Models.SubscriptionUpdate
         {
             SubscriptionId = subscription.Id,
-            Subscription = subscription,
-            Action = updateMessage
+            Action = updateMessage,
+            Success = true // Default to success, caller should update if needed
         };
-        var existingSubscriptionUpdate = await _context.SubscriptionUpdates.FindAsync(subscriptionUpdate.SubscriptionId);
-        if (existingSubscriptionUpdate == null)
-        {
-            _context.SubscriptionUpdates.Add(subscriptionUpdate);
-        }
-        else
-        {
-            _context.Entry(existingSubscriptionUpdate).CurrentValues.SetValues(subscriptionUpdate);
-        }
-        await _context.SaveChangesAsync();
+
+        await _subscriptionService.UpdateSubscriptionUpdateAsync(subscriptionUpdate);
     }
 }

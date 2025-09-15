@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using Maestro.Data;
+using Maestro.Data.Services;
 using Maestro.DataProviders;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.GitHub.Authentication;
@@ -54,6 +55,7 @@ public static class ProductConstructionServiceExtension
 
         builder.Services.AddKustoClientProvider("Kusto");
         builder.Services.AddSingleton<IInstallationLookup, BuildAssetRegistryInstallationLookup>();
+        builder.Services.AddSqliteSubscriptionService();
     }
 
     public static async Task AddRedisCache(

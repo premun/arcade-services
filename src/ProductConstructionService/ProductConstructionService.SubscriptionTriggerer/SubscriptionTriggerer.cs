@@ -3,6 +3,7 @@
 
 using Maestro.Data;
 using Maestro.Data.Models;
+using Maestro.Data.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ProductConstructionService.DependencyFlow.WorkItems;
@@ -14,15 +15,18 @@ public class SubscriptionTriggerer
 {
     private readonly ILogger<SubscriptionTriggerer> _logger;
     private readonly BuildAssetRegistryContext _context;
+    private readonly ISubscriptionService _subscriptionService;
     private readonly IWorkItemProducerFactory _workItemProducerFactory;
 
     public SubscriptionTriggerer(
         ILogger<SubscriptionTriggerer> logger,
         BuildAssetRegistryContext context,
+        ISubscriptionService subscriptionService,
         IWorkItemProducerFactory workItemProducerFactory)
     {
         _logger = logger;
         _context = context;
+        _subscriptionService = subscriptionService;
         _workItemProducerFactory = workItemProducerFactory;
     }
 
@@ -42,30 +46,29 @@ public class SubscriptionTriggerer
     {
         List<(bool, SubscriptionTriggerWorkItem)> subscriptionsToTrigger = [];
 
-        var enabledSubscriptionsWithTargetFrequency = (await _context.Subscriptions
-                .Where(s => s.Enabled)
-                .ToListAsync())
-                .Where(s => s.PolicyObject?.UpdateFrequency == targetUpdateFrequency)
+        var enabledSubscriptionsWithTargetFrequency = (await _subscriptionService.GetSubscriptionsAsync())
+                .Where(s => s.Enabled && s.PolicyObject?.UpdateFrequency == targetUpdateFrequency)
                 .ToList();
 
         var workItemProducer =
             _workItemProducerFactory.CreateProducer<SubscriptionTriggerWorkItem>();
         foreach (var subscription in enabledSubscriptionsWithTargetFrequency)
         {
-            Subscription? subscriptionWithBuilds = await _context.Subscriptions
-                .Where(s => s.Id == subscription.Id)
-                .Include(s => s.Channel)
-                .ThenInclude(c => c.BuildChannels)
+            // Get channel and build data from SQL context since these remain in SQL Server
+            var channel = await _context.Channels
+                .Where(c => c.Id == subscription.ChannelId)
+                .Include(c => c.BuildChannels)
                 .ThenInclude(bc => bc.Build)
                 .FirstOrDefaultAsync();
 
-            if (subscriptionWithBuilds == null)
+            if (channel == null)
             {
-                _logger.LogWarning("Subscription {subscriptionId} was not found in the BAR. Not triggering updates", subscription.Id.ToString());
+                _logger.LogWarning("Channel {channelId} for subscription {subscriptionId} was not found in the BAR. Not triggering updates", 
+                    subscription.ChannelId, subscription.Id.ToString());
                 continue;
             }
 
-            Build? latestBuildInTargetChannel = subscriptionWithBuilds.Channel.BuildChannels.Select(bc => bc.Build)
+            Build? latestBuildInTargetChannel = channel.BuildChannels.Select(bc => bc.Build)
                 .Where(b => (subscription.SourceRepository == b.GitHubRepository || subscription.SourceRepository == b.AzureDevOpsRepository))
                 .OrderByDescending(b => b.DateProduced)
                 .FirstOrDefault();

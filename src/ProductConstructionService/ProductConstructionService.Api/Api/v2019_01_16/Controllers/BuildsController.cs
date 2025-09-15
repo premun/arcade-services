@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.ApiVersioning.Swashbuckle;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Internal;
+using Maestro.Data.Services;
 
 namespace ProductConstructionService.Api.Api.v2019_01_16.Controllers;
 
@@ -21,13 +22,16 @@ namespace ProductConstructionService.Api.Api.v2019_01_16.Controllers;
 [ApiVersion("2019-01-16")]
 public class BuildsController : v2018_07_16.Controllers.BuildsController
 {
+    private readonly ISubscriptionService _subscriptionService;
     private readonly ISystemClock _clock;
 
     public BuildsController(
         BuildAssetRegistryContext context,
+        ISubscriptionService subscriptionService,
         ISystemClock clock)
         : base(context)
     {
+        _subscriptionService = subscriptionService;
         _clock = clock;
     }
 
@@ -100,22 +104,23 @@ public class BuildsController : v2018_07_16.Controllers.BuildsController
         return Ok(new Build(build));
     }
 
-    [HttpGet("{id}/graph")]
-    [SwaggerApiResponse(HttpStatusCode.OK, Type = typeof(BuildGraph), Description = "The tree of build dependencies")]
-    [ValidateModelState]
-    public virtual async Task<IActionResult> GetBuildGraph(int id)
-    {
-        Maestro.Data.Models.Build? build = await _context.Builds.FirstOrDefaultAsync(b => b.Id == id);
+    // TODO: Not supported anymore
+    //[HttpGet("{id}/graph")]
+    //[SwaggerApiResponse(HttpStatusCode.OK, Type = typeof(BuildGraph), Description = "The tree of build dependencies")]
+    //[ValidateModelState]
+    //public virtual async Task<IActionResult> GetBuildGraph(int id)
+    //{
+    //    Maestro.Data.Models.Build? build = await _context.Builds.FirstOrDefaultAsync(b => b.Id == id);
 
-        if (build == null)
-        {
-            return NotFound();
-        }
+    //    if (build == null)
+    //    {
+    //        return NotFound();
+    //    }
 
-        var builds = await _context.GetBuildGraphAsync(build.Id);
+    //    var builds = await _context.GetBuildGraphAsync(build.Id);
 
-        return Ok(BuildGraph.Create(builds.Select(b => new Build(b))));
-    }
+    //    return Ok(BuildGraph.Create(builds.Select(b => new Build(b))));
+    //}
 
     /// <summary>
     ///   Gets the latest <see cref="Build"/>s that matches the given search criteria.
@@ -253,8 +258,8 @@ public class BuildsController : v2018_07_16.Controllers.BuildsController
                     // date produced.
                     DateTimeOffset startTime = depBuild.DateProduced;
 
-                    Maestro.Data.Models.Subscription? subscription = await _context.Subscriptions
-                        .FirstOrDefaultAsync(s =>
+                    Maestro.Data.Models.Subscription? subscription = (await _subscriptionService.GetSubscriptionsAsync())
+                        .FirstOrDefault(s =>
                             (s.SourceRepository == depBuild.GitHubRepository || s.SourceRepository == depBuild.AzureDevOpsRepository) &&
                             (s.TargetRepository == buildModel.GitHubRepository || s.TargetRepository == buildModel.AzureDevOpsRepository) &&
                             (s.TargetBranch == buildModel.GitHubBranch || s.TargetBranch == buildModel.AzureDevOpsBranch));
