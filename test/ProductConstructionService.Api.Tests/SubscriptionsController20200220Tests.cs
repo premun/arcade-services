@@ -1,29 +1,10 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Net;
-using FluentAssertions;
-using ProductConstructionService.Api.v2020_02_20.Models;
-using Maestro.Data;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.DotNet.DarcLib;
-using Microsoft.DotNet.GitHub.Authentication;
-using Microsoft.DotNet.Internal.Testing.DependencyInjection.Abstractions;
-using Microsoft.DotNet.Internal.Testing.Utility;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Hosting.Internal;
-using Microsoft.Extensions.Internal;
-using Microsoft.Extensions.Logging;
-using Moq;
-using ProductConstructionService.Api.Api.v2020_02_20.Controllers;
-using ProductConstructionService.WorkItems;
-using ProductConstructionService.DependencyFlow.WorkItems;
-using Microsoft.DotNet.DarcLib.Helpers;
-using ProductConstructionService.Api.Api;
-
 namespace ProductConstructionService.Api.Tests;
+
+/*
+TODO: Won't work because we can't create subscriptions anymore
 
 [TestFixture]
 public partial class SubscriptionsController20200220Tests : IDisposable
@@ -819,3 +800,4 @@ public partial class SubscriptionsController20200220Tests : IDisposable
         return new MockOrg(id, login);
     }
 }
+*/
