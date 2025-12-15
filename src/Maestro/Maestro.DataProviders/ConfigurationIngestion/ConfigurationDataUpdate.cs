@@ -2,15 +2,15 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
-using Maestro.DataProviders.ConfigurationIngestion.Helpers;
+using Microsoft.DotNet.DarcLib.Models.Yaml;
 
 namespace Maestro.DataProviders.ConfigurationIngestion;
 
 public record ConfigurationDataUpdate(
-    EntityChanges<IngestedSubscription> Subscriptions,
-    EntityChanges<IngestedChannel> Channels,
-    EntityChanges<IngestedDefaultChannel> DefaultChannels,
-    EntityChanges<IngestedBranchMergePolicies> RepositoryBranches);
+    EntityChanges<SubscriptionYaml> Subscriptions,
+    EntityChanges<ChannelYaml> Channels,
+    EntityChanges<DefaultChannelYaml> DefaultChannels,
+    EntityChanges<BranchMergePoliciesYaml> RepositoryBranches);
 
 public record EntityChanges<T>(
     IEnumerable<T> Creations,

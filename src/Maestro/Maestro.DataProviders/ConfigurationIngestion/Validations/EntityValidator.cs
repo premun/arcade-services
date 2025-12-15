@@ -4,20 +4,21 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
-using Maestro.DataProviders.ConfigurationIngestion.Helpers;
 
 namespace Maestro.DataProviders.ConfigurationIngestion.Validations;
 
 internal class EntityValidator
 {
-    internal static void ValidateEntityUniqueness<T>(IEnumerable<IExternallySyncedEntity<T>> entities)
+    internal static void ValidateEntityUniqueness<T, TId>(IEnumerable<T> entities, Func<T, TId> idSelector)
+        where T : class
+        where TId : notnull
     {
         if (!entities.Any())
         {
             return;
         }
 
-        var uniqueIds = entities.Select(e => e.UniqueId).ToHashSet();
+        var uniqueIds = entities.Select(idSelector).ToHashSet();
 
         if (uniqueIds.Count != entities.Count())
         {

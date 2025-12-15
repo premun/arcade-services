@@ -3,7 +3,7 @@
 
 using System;
 using System.Collections.Generic;
-using Maestro.DataProviders.ConfigurationIngestion.Helpers;
+using Microsoft.DotNet.DarcLib.Models.Yaml;
 
 #nullable enable
 namespace Maestro.DataProviders.ConfigurationIngestion.Validations;
@@ -16,9 +16,9 @@ public class ChannelValidator
     /// <param name="channels">The Channel collection to validate</param>
     /// <exception cref="ArgumentException">Thrown when validation fails</exception>
     public static void ValidateChannels(
-        IEnumerable<IngestedChannel> channels)
+        IEnumerable<ChannelYaml> channels)
     {
-        EntityValidator.ValidateEntityUniqueness(channels);
+        EntityValidator.ValidateEntityUniqueness(channels, IdFactories.Channel);
 
         foreach (var channel in channels)
         {
@@ -26,11 +26,11 @@ public class ChannelValidator
         }
     }
 
-    public static void ValidateChannel(IngestedChannel channel)
+    public static void ValidateChannel(ChannelYaml channel)
     {
         ArgumentNullException.ThrowIfNull(channel);
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(channel.Values.Name);
-        ArgumentException.ThrowIfNullOrWhiteSpace(channel.Values.Classification);
+        ArgumentException.ThrowIfNullOrWhiteSpace(channel.Name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(channel.Classification);
     }
 }

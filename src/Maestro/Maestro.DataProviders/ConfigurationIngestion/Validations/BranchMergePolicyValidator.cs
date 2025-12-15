@@ -5,7 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Maestro.MergePolicyEvaluation;
-using Maestro.DataProviders.ConfigurationIngestion.Helpers;
+using Microsoft.DotNet.DarcLib.Models.Yaml;
 
 #nullable enable
 namespace Maestro.DataProviders.ConfigurationIngestion.Validations;
@@ -13,9 +13,9 @@ namespace Maestro.DataProviders.ConfigurationIngestion.Validations;
 public class BranchMergePolicyValidator
 {
     public static void ValidateBranchMergePolicies(
-        IEnumerable<IngestedBranchMergePolicies> branchMergePolicies)
+        IEnumerable<BranchMergePoliciesYaml> branchMergePolicies)
     {
-        EntityValidator.ValidateEntityUniqueness(branchMergePolicies);
+        EntityValidator.ValidateEntityUniqueness(branchMergePolicies, IdFactories.BranchMergePolicy);
 
         foreach (var branchMergePolicy in branchMergePolicies)
         {
@@ -28,25 +28,25 @@ public class BranchMergePolicyValidator
     /// </summary>
     /// <param name="branchMergePolicy">The RepositoryBranch to validate</param>
     /// <exception cref="ArgumentException">Thrown when validation fails</exception>
-    public static void ValidateBranchMergePolicies(IngestedBranchMergePolicies branchMergePolicy)
+    public static void ValidateBranchMergePolicies(BranchMergePoliciesYaml branchMergePolicy)
     {
         ArgumentNullException.ThrowIfNull(branchMergePolicy);
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(branchMergePolicy.Values.Repository);
-        ArgumentException.ThrowIfNullOrWhiteSpace(branchMergePolicy.Values.Branch);
-        ArgumentNullException.ThrowIfNull(branchMergePolicy.Values.MergePolicies);
+        ArgumentException.ThrowIfNullOrWhiteSpace(branchMergePolicy.Repository);
+        ArgumentException.ThrowIfNullOrWhiteSpace(branchMergePolicy.Branch);
+        ArgumentNullException.ThrowIfNull(branchMergePolicy.MergePolicies);
 
-        if (branchMergePolicy.Values.Repository.Length > Data.Models.Repository.RepositoryNameLength)
+        if (branchMergePolicy.Repository.Length > Data.Models.Repository.RepositoryNameLength)
         {
             throw new ArgumentException($"Repository name cannot be longer than {Data.Models.Repository.RepositoryNameLength}.");
         }
 
-        if (branchMergePolicy.Values.Branch.Length > Data.Models.Repository.BranchNameLength)
+        if (branchMergePolicy.Branch.Length > Data.Models.Repository.BranchNameLength)
         {
             throw new ArgumentException($"Branch name cannot be longer than {Data.Models.Repository.BranchNameLength}.");
         }
 
-        var mergePolicies = branchMergePolicy.Values.MergePolicies.Select(mp => mp.Name);
+        var mergePolicies = branchMergePolicy.MergePolicies.Select(mp => mp.Name);
 
         if (mergePolicies.Contains(MergePolicyConstants.StandardMergePolicyName)
             && mergePolicies.Any(SubscriptionValidator.StandardMergePolicies.Contains))

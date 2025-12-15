@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using Maestro.DataProviders.ConfigurationIngestion.Helpers;
 using Microsoft.DotNet.DarcLib.Models.Yaml;
 
 #nullable enable
@@ -17,9 +16,9 @@ internal class DefaultChannelValidator
     /// <param name="defaultChannels">The DefaultChannel collection to validate</param>
     /// <exception cref="ArgumentException">Thrown when validation fails</exception>
     internal static void ValidateDefaultChannels(
-        IEnumerable<IngestedDefaultChannel> defaultChannels)
+        IEnumerable<DefaultChannelYaml> defaultChannels)
     {
-        EntityValidator.ValidateEntityUniqueness(defaultChannels);
+        EntityValidator.ValidateEntityUniqueness(defaultChannels, IdFactories.DefaultChannel);
 
         foreach (var defaultChannel in defaultChannels)
         {
@@ -27,19 +26,19 @@ internal class DefaultChannelValidator
         }
     }
 
-    internal static void ValidateDefaultChannel(IngestedDefaultChannel defaultChannel)
+    internal static void ValidateDefaultChannel(DefaultChannelYaml defaultChannel)
     {
         ArgumentNullException.ThrowIfNull(defaultChannel);
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(defaultChannel.Values.Repository);
-        ArgumentException.ThrowIfNullOrWhiteSpace(defaultChannel.Values.Branch);
+        ArgumentException.ThrowIfNullOrWhiteSpace(defaultChannel.Repository);
+        ArgumentException.ThrowIfNullOrWhiteSpace(defaultChannel.Branch);
 
-        if (defaultChannel.Values.Repository.Length > 300)
+        if (defaultChannel.Repository.Length > 300)
         {
             throw new ArgumentException("Default channel repository cannot be longer than 300 characters.");
         }
 
-        if (defaultChannel.Values.Branch.Length > 100)
+        if (defaultChannel.Branch.Length > 100)
         {
             throw new ArgumentException("Default channel branch name cannot be longer than 100 characters.");
         }
