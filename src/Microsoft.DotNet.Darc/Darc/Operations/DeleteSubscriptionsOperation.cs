@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.MaestroConfiguration.Client;
@@ -23,15 +24,19 @@ internal class DeleteSubscriptionsOperation : Operation
     private readonly DeleteSubscriptionsCommandLineOptions _options;
     private readonly IConfigurationRepositoryManager _configRepositoryManager;
     private readonly ILogger<DeleteSubscriptionsOperation> _logger;
+    private readonly IConsoleUI _consoleUI;
+
     public DeleteSubscriptionsOperation(
         DeleteSubscriptionsCommandLineOptions options,
         IBarApiClient barClient,
         IConfigurationRepositoryManager configRepositoryManager,
+        IConsoleUI consoleUI,
         ILogger<DeleteSubscriptionsOperation> logger)
     {
         _options = options;
         _barClient = barClient;
         _configRepositoryManager = configRepositoryManager;
+        _consoleUI = consoleUI;
         _logger = logger;
     }
 
@@ -52,7 +57,7 @@ internal class DeleteSubscriptionsOperation : Operation
                 }
                 catch (RestApiException e) when (e.Response.Status == (int) HttpStatusCode.NotFound)
                 {
-                    Console.WriteLine($"Subscription with id '{_options.Id}' was not found.");
+                    _consoleUI.WriteError($"Subscription with id '{_options.Id}' was not found.");
                     return Constants.ErrorCode;
                 }
             }
@@ -60,7 +65,7 @@ internal class DeleteSubscriptionsOperation : Operation
             {
                 if (!_options.HasAnyFilters())
                 {
-                    Console.WriteLine($"Please specify one or more filters to select which subscriptions should be deleted (see help).");
+                    _consoleUI.WriteError($"Please specify one or more filters to select which subscriptions should be deleted (see help).");
                     return Constants.ErrorCode;
                 }
 
@@ -68,7 +73,7 @@ internal class DeleteSubscriptionsOperation : Operation
 
                 if (!subscriptions.Any())
                 {
-                    Console.WriteLine("No subscriptions found matching the specified criteria.");
+                    _consoleUI.WriteWarning("No subscriptions found matching the specified criteria.");
                     return Constants.ErrorCode;
                 }
 
@@ -89,41 +94,42 @@ internal class DeleteSubscriptionsOperation : Operation
                 if (!noConfirm)
                 {
                     // Print out the list of subscriptions about to be triggered.
-                    Console.WriteLine($"Will delete the following {subscriptionsToDelete.Count} subscriptions...");
+                    _consoleUI.WriteInfo($"Will delete the following {subscriptionsToDelete.Count} subscriptions...");
                     foreach (var subscription in subscriptionsToDelete)
                     {
-                        Console.WriteLine($"  {UxHelpers.GetSubscriptionDescription(subscription)}");
+                        _consoleUI.WriteLine($"  {UxHelpers.GetSubscriptionDescription(subscription)}");
                     }
 
                     if (!UxHelpers.PromptForYesNo("Continue?"))
                     {
-                        Console.WriteLine($"No subscriptions deleted, exiting.");
+                        _consoleUI.WriteWarning($"No subscriptions deleted, exiting.");
                         return Constants.ErrorCode;
                     }
                 }
 
-                Console.Write($"Deleting {subscriptionsToDelete.Count} subscriptions...{(noConfirm ? Environment.NewLine : "")}");
+                _consoleUI.Write($"Deleting {subscriptionsToDelete.Count} subscriptions...{(noConfirm ? Environment.NewLine : "")}");
                 foreach (var subscription in subscriptionsToDelete)
                 {
                     // If noConfirm was passed, print out the subscriptions as we go
                     if (noConfirm)
                     {
-                        Console.WriteLine($"  {UxHelpers.GetSubscriptionDescription(subscription)}");
+                        _consoleUI.WriteLine($"  {UxHelpers.GetSubscriptionDescription(subscription)}");
                     }
                     await _barClient.DeleteSubscriptionAsync(subscription.Id);
                 } 
             }
-            Console.WriteLine("done");
+            _consoleUI.WriteSuccess("done");
 
             return Constants.SuccessCode;
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError("Unexpected error while deleting subscriptions.");
             _logger.LogError(e, "Unexpected error while deleting subscriptions.");
             return Constants.ErrorCode;
         }

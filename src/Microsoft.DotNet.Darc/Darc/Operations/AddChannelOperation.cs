@@ -4,6 +4,7 @@
 using System;
 using System.Net;
 using System.Threading.Tasks;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.ProductConstructionService.Client;
@@ -18,14 +19,17 @@ internal class AddChannelOperation : Operation
     private readonly AddChannelCommandLineOptions _options;
     private readonly ILogger<AddChannelOperation> _logger;
     private readonly IBarApiClient _barClient;
+    private readonly IConsoleUI _consoleUI;
 
     public AddChannelOperation(
         AddChannelCommandLineOptions options,
         IBarApiClient barClient,
+        IConsoleUI consoleUI,
         ILogger<AddChannelOperation> logger)
     {
         _options = options;
         _barClient = barClient;
+        _consoleUI = consoleUI;
         _logger = logger;
     }
 
@@ -41,15 +45,22 @@ internal class AddChannelOperation : Operation
             // unsupported.
             if (_options.Internal)
             {
-                _logger.LogError("Cannot currently mark channels as internal.");
+                _consoleUI.WriteError("Cannot currently mark channels as internal.");
                 return Constants.ErrorCode;
             }
 
-            Channel newChannelInfo = await _barClient.CreateChannelAsync(_options.Name, _options.Classification);
+            var newChannelInfo = await _consoleUI.StatusAsync(
+                $"Creating channel '{_options.Name}'...",
+                async ctx =>
+                {
+                    ctx.Log($"Classification: {_options.Classification}");
+                    return await _barClient.CreateChannelAsync(_options.Name, _options.Classification);
+                });
+
             switch (_options.OutputFormat)
             {
                 case DarcOutputType.json:
-                    Console.WriteLine(JsonConvert.SerializeObject(
+                    _consoleUI.WriteLine(JsonConvert.SerializeObject(
                         new
                         {
                             id = newChannelInfo.Id,
@@ -59,7 +70,7 @@ internal class AddChannelOperation : Operation
                         Formatting.Indented));
                     break;
                 case DarcOutputType.text:
-                    Console.WriteLine($"Successfully created new channel with name '{_options.Name}' and id {newChannelInfo.Id}.");
+                    _consoleUI.WriteSuccess($"Successfully created new channel with name '{_options.Name}' and id {newChannelInfo.Id}.");
                     break;
                 default:
                     throw new NotImplementedException($"Output type {_options.OutputFormat} not supported by add-channel");
@@ -69,16 +80,17 @@ internal class AddChannelOperation : Operation
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (RestApiException e) when (e.Response.Status == (int) HttpStatusCode.Conflict)
         {
-            _logger.LogError($"An existing channel with name '{_options.Name}' already exists");
+            _consoleUI.WriteError($"An existing channel with name '{_options.Name}' already exists");
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError($"Error: Failed to create new channel: {e.Message}");
             _logger.LogError(e, "Error: Failed to create new channel.");
             return Constants.ErrorCode;
         }

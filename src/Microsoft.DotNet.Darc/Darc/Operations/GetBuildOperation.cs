@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.ProductConstructionService.Client;
@@ -20,14 +21,17 @@ internal class GetBuildOperation : Operation
     private readonly GetBuildCommandLineOptions _options;
     private readonly IBarApiClient _barClient;
     private readonly ILogger<GetBuildOperation> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public GetBuildOperation(
         GetBuildCommandLineOptions options,
         IBarApiClient barClient,
+        IConsoleUI consoleUI,
         ILogger<GetBuildOperation> logger)
     {
         _options = options;
         _barClient = barClient;
+        _consoleUI = consoleUI;
         _logger = logger;
     }
 
@@ -45,7 +49,7 @@ internal class GetBuildOperation : Operation
                 if (!string.IsNullOrEmpty(_options.Repo) ||
                     !string.IsNullOrEmpty(_options.Commit))
                 {
-                    Console.WriteLine("--id should not be used with other options.");
+                    _consoleUI.WriteError("--id should not be used with other options.");
                     return Constants.ErrorCode;
                 }
 
@@ -55,7 +59,7 @@ internal class GetBuildOperation : Operation
             {
                 if (string.IsNullOrEmpty(_options.Repo) != string.IsNullOrEmpty(_options.Commit))
                 {
-                    Console.WriteLine("--repo and --commit should be used together.");
+                    _consoleUI.WriteError("--repo and --commit should be used together.");
                     return Constants.ErrorCode;
                 }
                 var subscriptions = await _barClient.GetSubscriptionsAsync();
@@ -73,14 +77,14 @@ internal class GetBuildOperation : Operation
             }
             else
             {
-                Console.WriteLine("Please specify --id, --uri, or --repo and --commit to lookup a build.");
+                _consoleUI.WriteError("Please specify --id, --uri, or --repo and --commit to lookup a build.");
                 return Constants.ErrorCode;
             }
 
             // Print the build info.
             if (matchingBuilds.Count == 0)
             {
-                Console.WriteLine($"Could not any builds matching the given criteria.");
+                _consoleUI.WriteWarning($"Could not any builds matching the given criteria.");
                 return Constants.ErrorCode;
             }
 
@@ -89,7 +93,7 @@ internal class GetBuildOperation : Operation
                 case DarcOutputType.text:
                     foreach (var build in matchingBuilds)
                     {
-                        Console.Write(UxHelpers.GetTextBuildDescription(build));
+                        _consoleUI.Write(UxHelpers.GetTextBuildDescription(build));
                     }
                     break;
                 case DarcOutputType.json:
@@ -103,7 +107,7 @@ internal class GetBuildOperation : Operation
                         objectToSerialize = matchingBuilds.Select(UxHelpers.GetJsonBuildDescription);
                     }
 
-                    Console.WriteLine(JsonConvert.SerializeObject(objectToSerialize, Formatting.Indented));
+                    _consoleUI.WriteLine(JsonConvert.SerializeObject(objectToSerialize, Formatting.Indented));
                     break;
                 default:
                     throw new NotImplementedException($"Output format type {_options.OutputFormat} not yet supported for get-build.");
@@ -113,11 +117,12 @@ internal class GetBuildOperation : Operation
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError("Failed to retrieve build information.");
             _logger.LogError(e, "Error: Failed to retrieve build information.");
             return Constants.ErrorCode;
         }

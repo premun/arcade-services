@@ -1,4 +1,4 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
@@ -9,6 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Maestro.Common;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.DarcLib.Helpers;
@@ -30,6 +31,7 @@ internal class UpdateDependenciesOperation : Operation
     private readonly IGitRepoFactory _gitRepoFactory;
     private readonly ICoherencyUpdateResolver _coherencyUpdateResolver;
     private readonly IFileSystem _fileSystem;
+    private readonly IConsoleUI _consoleUI;
 
     public UpdateDependenciesOperation(
         UpdateDependenciesCommandLineOptions options,
@@ -39,7 +41,8 @@ internal class UpdateDependenciesOperation : Operation
         IGitRepoFactory gitRepoFactory,
         ICoherencyUpdateResolver coherencyUpdateResolver,
         ILogger<UpdateDependenciesOperation> logger,
-        IFileSystem fileSystem)
+        IFileSystem fileSystem,
+        IConsoleUI consoleUI)
     {
         _options = options;
         _logger = logger;
@@ -49,6 +52,7 @@ internal class UpdateDependenciesOperation : Operation
         _gitRepoFactory = gitRepoFactory;
         _coherencyUpdateResolver = coherencyUpdateResolver;
         _fileSystem = fileSystem;
+        _consoleUI = consoleUI;
     }
 
     /// <summary>
@@ -160,7 +164,7 @@ internal class UpdateDependenciesOperation : Operation
             DependencyDetail to = update.To;
 
             // Print out what we are going to do.	
-            Console.WriteLine($"    Updating '{from.Name}': '{from.Version}' => '{to.Version}'"
+            _consoleUI.WriteLine($"    Updating '{from.Name}': '{from.Version}' => '{to.Version}'"
                               + $" (from build '{build.AzureDevOpsBuildNumber}' of '{build.GetRepository()}')");
 
             // Replace in the current dependencies list so the correct data can be used in coherency updates.
@@ -194,7 +198,7 @@ internal class UpdateDependenciesOperation : Operation
         var dependenciesRelativeFolder = relativeBasePath == UnixPath.Empty
             ? "root"
             : relativeBasePath;
-        Console.WriteLine($"Path {dependenciesRelativeFolder}");
+        _consoleUI.WriteLine($"Path {dependenciesRelativeFolder}");
 
         // If the source repository was specified, filter away any local dependencies not from that
         // source repository.
@@ -262,9 +266,9 @@ internal class UpdateDependenciesOperation : Operation
 
         if (!_options.DryRun)
         {
-            Console.Write("    Applying updates...");
+            _consoleUI.Write("    Applying updates...");
             await local.UpdateDependenciesAsync(dependenciesToUpdate, _remoteFactory, _gitRepoFactory, _barClient, relativeBasePath);
-            Console.WriteLine("    done.");
+            _consoleUI.WriteLine("    done.");
         }
     }
 
@@ -278,18 +282,18 @@ internal class UpdateDependenciesOperation : Operation
             return Constants.SuccessCode;
         }
 
-        Console.Write("    Checking for coherency updates...");
+        _consoleUI.Write("    Checking for coherency updates...");
 
         List<DependencyUpdate> coherencyUpdates = null;
         try
         {
             // Now run a coherency update based on the current set of dependencies updated from the previous pass.
             coherencyUpdates = await _coherencyUpdateResolver.GetRequiredCoherencyUpdatesAsync(currentDependencies);
-            Console.WriteLine("done.");
+            _consoleUI.WriteLine("done.");
         }
         catch (DarcCoherencyException e)
         {
-            Console.WriteLine("failed.");
+            _consoleUI.WriteError("failed.");
             PrettyPrintCoherencyErrors(e);
             return Constants.ErrorCode;
         }
@@ -301,7 +305,7 @@ internal class UpdateDependenciesOperation : Operation
             DependencyDetail coherencyParent = currentDependencies.First(d =>
                 d.Name.Equals(from.CoherentParentDependencyName, StringComparison.OrdinalIgnoreCase));
             // Print out what we are going to do.	
-            Console.WriteLine($"    Updating '{from.Name}': '{from.Version}' => '{to.Version}' " +
+            _consoleUI.WriteLine($"    Updating '{from.Name}': '{from.Version}' => '{to.Version}' " +
                               $"to ensure coherency with {from.CoherentParentDependencyName}@{coherencyParent.Version}");
 
             // Final list of dependencies to update
@@ -336,7 +340,7 @@ internal class UpdateDependenciesOperation : Operation
         dependency.Version = _options.Version;
         dependenciesToUpdate.Add(dependency);
 
-        Console.WriteLine($"    Updating '{dependency.Name}': '{dependency.Version}' => '{_options.Version}'");
+        _consoleUI.WriteLine($"    Updating '{dependency.Name}': '{dependency.Version}' => '{_options.Version}'");
     }
 
     private void UpdateDependenciesFromLocalFolder(
@@ -420,7 +424,7 @@ internal class UpdateDependenciesOperation : Operation
             {
                 continue;
             }
-            Console.WriteLine($"    Looking up latest build of {repoToQuery} on {_options.Channel}");
+            _consoleUI.WriteLine($"    Looking up latest build of {repoToQuery} on {_options.Channel}");
             var latestBuild = _barClient.GetLatestBuildAsync(repoToQuery, channel.Id);
             latestBuildTaskDictionary.TryAdd(repoToQuery, latestBuild);
         }
@@ -448,7 +452,7 @@ internal class UpdateDependenciesOperation : Operation
         }
     }
 
-    private static IEnumerable<DependencyDetail> GetDependenciesFromPackagesFolder(string pathToFolder, IEnumerable<DependencyDetail> dependencies)
+    private IEnumerable<DependencyDetail> GetDependenciesFromPackagesFolder(string pathToFolder, IEnumerable<DependencyDetail> dependencies)
     {
         Dictionary<string, string> dependencyVersionMap = [];
 
@@ -479,7 +483,7 @@ internal class UpdateDependenciesOperation : Operation
                 continue;
             }
 
-            Console.WriteLine($"Updating '{manifestMetedata.Id}': '{oldVersion}' => '{manifestMetedata.Version.OriginalVersion}'");
+            _consoleUI.WriteLine($"Updating '{manifestMetedata.Id}': '{oldVersion}' => '{manifestMetedata.Version.OriginalVersion}'");
 
             updatedDependencies.Add(new DependencyDetail
             {
@@ -554,18 +558,18 @@ internal class UpdateDependenciesOperation : Operation
             throw new DarcException("Source-enabled subscriptions (VMR code flow) are not supported with --subscription. This parameter is only for dependency flow subscriptions.");
         }
 
-        Console.WriteLine($"Simulating subscription '{subscription.Id}':");
-        Console.WriteLine($"  Source: {subscription.SourceRepository} (channel: {subscription.Channel.Name})");
-        Console.WriteLine($"  Target: {subscription.TargetRepository}#{subscription.TargetBranch}");
+        _consoleUI.WriteLine($"Simulating subscription '{subscription.Id}':");
+        _consoleUI.WriteLine($"  Source: {subscription.SourceRepository} (channel: {subscription.Channel.Name})");
+        _consoleUI.WriteLine($"  Target: {subscription.TargetRepository}#{subscription.TargetBranch}");
 
         if (!string.IsNullOrEmpty(subscription.TargetDirectory))
         {
-            Console.WriteLine($"  Target directory: {subscription.TargetDirectory}");
+            _consoleUI.WriteLine($"  Target directory: {subscription.TargetDirectory}");
         }
 
         if (subscription.ExcludedAssets?.Count > 0)
         {
-            Console.WriteLine($"  Excluded assets: {string.Join(", ", subscription.ExcludedAssets)}");
+            _consoleUI.WriteLine($"  Excluded assets: {string.Join(", ", subscription.ExcludedAssets)}");
         }
 
         // Find the latest build from the source repository on the channel (unless build ID is provided)
@@ -574,16 +578,16 @@ internal class UpdateDependenciesOperation : Operation
             var latestBuild = await _barClient.GetLatestBuildAsync(subscription.SourceRepository, subscription.Channel.Id)
                 ?? throw new DarcException($"No builds found for repository '{subscription.SourceRepository}' on channel '{subscription.Channel.Name}'.");
 
-            Console.WriteLine($"  Latest build: {latestBuild.AzureDevOpsBuildNumber} (BAR ID: {latestBuild.Id})");
-            Console.WriteLine($"  Build commit: {latestBuild.Commit}");
+            _consoleUI.WriteLine($"  Latest build: {latestBuild.AzureDevOpsBuildNumber} (BAR ID: {latestBuild.Id})");
+            _consoleUI.WriteLine($"  Build commit: {latestBuild.Commit}");
             _options.BARBuildId = latestBuild.Id;
         }
         else
         {
-            Console.WriteLine($"  Using provided build ID: {_options.BARBuildId}");
+            _consoleUI.WriteLine($"  Using provided build ID: {_options.BARBuildId}");
         }
 
-        Console.WriteLine();
+        _consoleUI.WriteLine();
 
         // Populate options from subscription settings
         _options.Channel = subscription.Channel.Name;

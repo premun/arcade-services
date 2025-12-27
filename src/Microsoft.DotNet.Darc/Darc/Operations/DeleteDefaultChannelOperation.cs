@@ -3,6 +3,7 @@
 
 using System;
 using System.Threading.Tasks;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.ProductConstructionService.Client;
@@ -18,8 +19,9 @@ internal class DeleteDefaultChannelOperation : UpdateDefaultChannelBaseOperation
     public DeleteDefaultChannelOperation(
         DeleteDefaultChannelCommandLineOptions options,
         IBarApiClient barClient,
+        IConsoleUI consoleUI,
         ILogger<DeleteDefaultChannelOperation> logger)
-        : base(options, barClient)
+        : base(options, barClient, consoleUI)
     {
         _logger = logger;
     }
@@ -34,17 +36,26 @@ internal class DeleteDefaultChannelOperation : UpdateDefaultChannelBaseOperation
                 return Constants.ErrorCode;
             }
 
-            await _barClient.DeleteDefaultChannelAsync(resolvedChannel.Id);
+            await _consoleUI.StatusAsync(
+                $"Deleting default channel association...",
+                async ctx =>
+                {
+                    ctx.Log($"Channel: {resolvedChannel.Channel.Name}");
+                    ctx.Log($"Repository: {resolvedChannel.Repository}");
+                    await _barClient.DeleteDefaultChannelAsync(resolvedChannel.Id);
+                });
 
+            _consoleUI.WriteSuccess("Default channel association deleted successfully.");
             return Constants.SuccessCode;
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError($"Error: Failed to remove the default channel association: {e.Message}");
             _logger.LogError(e, "Error: Failed remove the default channel association.");
             return Constants.ErrorCode;
         }

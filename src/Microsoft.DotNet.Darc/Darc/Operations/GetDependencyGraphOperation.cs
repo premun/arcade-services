@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Maestro.Common;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.DarcLib.Helpers;
@@ -27,13 +28,15 @@ internal class GetDependencyGraphOperation : Operation
     private readonly IRemoteTokenProvider _remoteTokenProvider;
     private readonly IBarApiClient _barClient;
     private readonly ILogger<GetDependencyGraphOperation> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public GetDependencyGraphOperation(
         GetDependencyGraphCommandLineOptions options,
         ILogger<GetDependencyGraphOperation> logger,
         IRemoteFactory remoteFactory,
         IRemoteTokenProvider remoteTokenProvider,
-        IBarApiClient barClient)
+        IBarApiClient barClient,
+        IConsoleUI consoleUI)
     {
         _options = options;
         _gitClient = new LocalLibGit2Client(
@@ -46,6 +49,7 @@ internal class GetDependencyGraphOperation : Operation
         _remoteFactory = remoteFactory;
         _remoteTokenProvider = remoteTokenProvider;
         _barClient = barClient;
+        _consoleUI = consoleUI;
     }
 
     public override async Task<int> ExecuteAsync()
@@ -70,7 +74,7 @@ internal class GetDependencyGraphOperation : Operation
                         diffOption = NodeDiff.LatestInGraph;
                         break;
                     default:
-                        Console.WriteLine("Unknown --delta-from option, please see help.");
+                        _consoleUI.WriteError("Unknown --delta-from option, please see help.");
                         return Constants.ErrorCode;
                 }
 
@@ -83,11 +87,11 @@ internal class GetDependencyGraphOperation : Operation
                 {
                     if (string.IsNullOrEmpty(_options.Version))
                     {
-                        Console.WriteLine("If --repo is set, --version should be supplied");
+                        _consoleUI.WriteError("If --repo is set, --version should be supplied");
                         return Constants.ErrorCode;
                     }
 
-                    Console.WriteLine($"Getting root dependencies from {_options.RepoUri}@{_options.Version}...");
+                    _consoleUI.WriteLine($"Getting root dependencies from {_options.RepoUri}@{_options.Version}...");
 
                     // Grab root dependency set. The graph build can do this, but
                     // if an original asset name is passed, then this will do the initial filtering.
@@ -101,11 +105,11 @@ internal class GetDependencyGraphOperation : Operation
                 {
                     if (!string.IsNullOrEmpty(_options.Version))
                     {
-                        Console.WriteLine("If --version is supplied, then --repo is required");
+                        _consoleUI.WriteError("If --version is supplied, then --repo is required");
                         return Constants.ErrorCode;
                     }
 
-                    Console.WriteLine($"Getting root dependencies from local repository...");
+                    _consoleUI.WriteLine($"Getting root dependencies from local repository...");
 
                     // Grab root dependency set from local repo
                     var local = new Local(_remoteTokenProvider, _logger);
@@ -113,13 +117,13 @@ internal class GetDependencyGraphOperation : Operation
                         _options.AssetName);
                 }
 
-                Console.WriteLine($"Building repository dependency graph...");
+                _consoleUI.WriteLine($"Building repository dependency graph...");
 
                 rootDependencies = FilterToolsetDependencies(rootDependencies);
 
                 if (!rootDependencies.Any())
                 {
-                    Console.WriteLine($"No root dependencies found, exiting.");
+                    _consoleUI.WriteWarning($"No root dependencies found, exiting.");
                     return Constants.ErrorCode;
                 }
 
@@ -142,7 +146,7 @@ internal class GetDependencyGraphOperation : Operation
             }
             else
             {
-                Console.WriteLine($"Getting root dependencies from local repository...");
+                _consoleUI.WriteLine($"Getting root dependencies from local repository...");
 
                 var local = new Local(_remoteTokenProvider, _logger);
                 rootDependencies = await local.GetDependenciesAsync(
@@ -152,11 +156,11 @@ internal class GetDependencyGraphOperation : Operation
 
                 if (!rootDependencies.Any())
                 {
-                    Console.WriteLine($"No root dependencies found, exiting.");
+                    _consoleUI.WriteWarning($"No root dependencies found, exiting.");
                     return Constants.ErrorCode;
                 }
 
-                Console.WriteLine($"Building repository dependency graph from local information...");
+                _consoleUI.WriteLine($"Building repository dependency graph from local information...");
 
                 var graphBuildOptions = new DependencyGraphBuildOptions()
                 {
@@ -194,7 +198,7 @@ internal class GetDependencyGraphOperation : Operation
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (Exception exc)
@@ -208,7 +212,7 @@ internal class GetDependencyGraphOperation : Operation
     {
         if (!_options.IncludeToolset)
         {
-            Console.WriteLine($"Removing toolset dependencies...");
+            _consoleUI.WriteLine($"Removing toolset dependencies...");
             return dependencies.Where(dependency => dependency.Type != DependencyType.Toolset);
         }
         return dependencies;

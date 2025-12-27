@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.ProductConstructionService.Client;
@@ -24,14 +25,17 @@ internal class GetSubscriptionsOperation : Operation
     private readonly GetSubscriptionsCommandLineOptions _options;
     private readonly IBarApiClient _barClient;
     private readonly ILogger<GetSubscriptionsOperation> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public GetSubscriptionsOperation(
         GetSubscriptionsCommandLineOptions options,
         IBarApiClient barClient,
+        IConsoleUI consoleUI,
         ILogger<GetSubscriptionsOperation> logger)
     {
         _options = options;
         _barClient = barClient;
+        _consoleUI = consoleUI;
         _logger = logger;
     }
 
@@ -39,11 +43,13 @@ internal class GetSubscriptionsOperation : Operation
     {
         try
         {
-            IEnumerable<Subscription> subscriptions = await _options.FilterSubscriptions(_barClient);
+            var subscriptions = await _consoleUI.StatusAsync(
+                "Retrieving subscriptions...",
+                async ctx => await _options.FilterSubscriptions(_barClient));
 
             if (!subscriptions.Any())
             {
-                Console.WriteLine("No subscriptions found matching the specified criteria.");
+                _consoleUI.WriteWarning("No subscriptions found matching the specified criteria.");
                 return Constants.ErrorCode;
             }
 
@@ -63,17 +69,18 @@ internal class GetSubscriptionsOperation : Operation
         }
         catch (AuthenticationException ex)
         {
-            Console.WriteLine(ex.Message);
+            _consoleUI.WriteError(ex.Message);
             return Constants.ErrorCode;
         }
         catch (Exception ex)
         {
+            _consoleUI.WriteError($"Error: Failed to retrieve subscriptions: {ex.Message}");
             _logger.LogError(ex, "Error: Failed to retrieve subscriptions");
             return Constants.ErrorCode;
         }
     }
 
-    private static async Task OutputJsonAsync(IEnumerable<Subscription> subscriptions, IBarApiClient barClient)
+    private async Task OutputJsonAsync(IEnumerable<Subscription> subscriptions, IBarApiClient barClient)
     {
         foreach (var subscription in Sort(subscriptions))
         {
@@ -91,10 +98,10 @@ internal class GetSubscriptionsOperation : Operation
             }
         }
 
-        Console.WriteLine(JsonConvert.SerializeObject(subscriptions, Formatting.Indented));
+        _consoleUI.WriteLine(JsonConvert.SerializeObject(subscriptions, Formatting.Indented));
     }
 
-    private static async Task OutputTextAsync(IEnumerable<Subscription> subscriptions, IBarApiClient barClient)
+    private async Task OutputTextAsync(IEnumerable<Subscription> subscriptions, IBarApiClient barClient)
     {
         foreach (var subscription in Sort(subscriptions))
         {
@@ -106,7 +113,7 @@ internal class GetSubscriptionsOperation : Operation
             }
 
             string subscriptionInfo = UxHelpers.GetTextSubscriptionDescription(subscription, mergePolicies);
-            Console.Write(subscriptionInfo);
+            _consoleUI.Write(subscriptionInfo);
         }
     }
 

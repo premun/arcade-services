@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.ProductConstructionService.Client;
@@ -24,14 +25,17 @@ internal class GetAssetOperation : Operation
     private readonly GetAssetCommandLineOptions _options;
     private readonly IBarApiClient _barClient;
     private readonly ILogger<GetAssetOperation> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public GetAssetOperation(
         GetAssetCommandLineOptions options,
         IBarApiClient barClient,
+        IConsoleUI consoleUI,
         ILogger<GetAssetOperation> logger)
     {
         _options = options;
         _barClient = barClient;
+        _consoleUI = consoleUI;
         _logger = logger;
     }
 
@@ -39,13 +43,13 @@ internal class GetAssetOperation : Operation
     {
         if (_options.Name == null && _options.Build == null)
         {
-            Console.WriteLine("You need to specify either an asset name or a build");
+            _consoleUI.WriteError("You need to specify either an asset name or a build");
             return Constants.ErrorCode;
         }
 
         if (_options.Latest && _options.Version != null)
         {
-            Console.WriteLine("Cannot specify an exact version when fetching latest asset");
+            _consoleUI.WriteError("Cannot specify an exact version when fetching latest asset");
             return Constants.ErrorCode;
         }
 
@@ -96,7 +100,7 @@ internal class GetAssetOperation : Operation
             // Only print the lookup string if the output type is text.
             if (_options.OutputFormat == DarcOutputType.text)
             {
-                Console.WriteLine($"Looking up{queryDescription}");
+                _consoleUI.WriteInfo($"Looking up{queryDescription}");
             }
 
             // Walk the assets and look up the corresponding builds, potentially filtering based on channel
@@ -142,11 +146,11 @@ internal class GetAssetOperation : Operation
 
             if (matchingAssetsAfterDate.Count == 0)
             {
-                Console.WriteLine($"No assets found with {queryDescription}");
+                _consoleUI.WriteWarning($"No assets found with {queryDescription}");
                 int remaining = matchingAssets.Count - checkedAssets;
                 if (remaining > 0)
                 {
-                    Console.WriteLine($"Skipping build lookup for {remaining} assets. Consider increasing --max-age to check the rest.");
+                    _consoleUI.WriteInfo($"Skipping build lookup for {remaining} assets. Consider increasing --max-age to check the rest.");
                 }
 
                 return Constants.ErrorCode;
@@ -157,24 +161,24 @@ internal class GetAssetOperation : Operation
                 case DarcOutputType.text:
                     foreach ((Asset asset, ProductConstructionService.Client.Models.Build build) in matchingAssetsAfterDate)
                     {
-                        Console.WriteLine($"{asset.Name} @ {asset.Version}");
-                        Console.Write(UxHelpers.GetTextBuildDescription(build));
-                        Console.WriteLine("Locations:");
+                        _consoleUI.WriteLine($"{asset.Name} @ {asset.Version}");
+                        _consoleUI.Write(UxHelpers.GetTextBuildDescription(build));
+                        _consoleUI.WriteLine("Locations:");
                         if (asset.Locations.Count != 0)
                         {
                             foreach (var location in asset.Locations)
                             {
                                 if (location.IsValid)
                                 {
-                                    Console.WriteLine($"- {location.Location} ({location.Type})");
+                                    _consoleUI.WriteLine($"- {location.Location} ({location.Type})");
                                 }
                             }
                         }
                         else
                         {
-                            Console.WriteLine("- None");
+                            _consoleUI.WriteLine("- None");
                         }
-                        Console.WriteLine();
+                        _consoleUI.WriteLine();
                     }
                     break;
                 case DarcOutputType.json:
@@ -188,7 +192,7 @@ internal class GetAssetOperation : Operation
                             locations = assetAndBuild.asset.Locations.Select(location => location.Location)
                         };
                     });
-                    Console.WriteLine(JsonConvert.SerializeObject(assets, Formatting.Indented));
+                    _consoleUI.WriteLine(JsonConvert.SerializeObject(assets, Formatting.Indented));
                     break;
             }
 
@@ -196,11 +200,12 @@ internal class GetAssetOperation : Operation
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError("Failed to retrieve information about assets.");
             _logger.LogError(e, "Error: Failed to retrieve information about assets.");
             return Constants.ErrorCode;
         }

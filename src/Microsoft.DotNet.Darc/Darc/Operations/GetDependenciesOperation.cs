@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Maestro.Common;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.DarcLib.Helpers;
@@ -20,14 +21,17 @@ internal class GetDependenciesOperation : Operation
     private readonly GetDependenciesCommandLineOptions _options;
     private readonly IRemoteTokenProvider _remoteTokenProvider;
     private readonly ILogger<GetDependenciesOperation> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public GetDependenciesOperation(
         GetDependenciesCommandLineOptions options,
         IRemoteTokenProvider remoteTokenProvider,
+        IConsoleUI consoleUI,
         ILogger<GetDependenciesOperation> logger)
     {
         _options = options;
         _remoteTokenProvider = remoteTokenProvider;
+        _consoleUI = consoleUI;
         _logger = logger;
     }
 
@@ -37,11 +41,16 @@ internal class GetDependenciesOperation : Operation
 
         try
         {
-            IEnumerable<DependencyDetail> dependencies = await local.GetDependenciesAsync(
-                _options.Name,
-                relativeBasePath: _options.RelativeBasePath != null
-                    ? new UnixPath(_options.RelativeBasePath)
-                    : null);
+            var dependencies = await _consoleUI.StatusAsync(
+                "Getting dependencies...",
+                async ctx =>
+                {
+                    return await local.GetDependenciesAsync(
+                        _options.Name,
+                        relativeBasePath: _options.RelativeBasePath != null
+                            ? new UnixPath(_options.RelativeBasePath)
+                            : null);
+                });
 
             if (!string.IsNullOrEmpty(_options.Name))
             {
@@ -57,7 +66,7 @@ internal class GetDependenciesOperation : Operation
             {
                 LogDependency(dependency);
 
-                Console.WriteLine();
+                _consoleUI.WriteLine();
             }
 
             return Constants.SuccessCode;
@@ -66,10 +75,12 @@ internal class GetDependenciesOperation : Operation
         {
             if (!string.IsNullOrEmpty(_options.Name))
             {
+                _consoleUI.WriteError($"Something failed while querying for local dependency '{_options.Name}': {exc.Message}");
                 _logger.LogError(exc, $"Something failed while querying for local dependency '{_options.Name}'.");
             }
             else
             {
+                _consoleUI.WriteError($"Something failed while querying for local dependencies: {exc.Message}");
                 _logger.LogError(exc, "Something failed while querying for local dependencies.");
             }
                 
@@ -77,8 +88,8 @@ internal class GetDependenciesOperation : Operation
         }
     }
 
-    private static void LogDependency(DependencyDetail dependency)
+    private void LogDependency(DependencyDetail dependency)
     {
-        Console.Write(UxHelpers.DependencyToString(dependency));
+        _consoleUI.Write(UxHelpers.DependencyToString(dependency));
     }
 }

@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.DarcLib.Models.Darc;
@@ -21,15 +22,18 @@ internal class GetDependencyFlowGraphOperation : Operation
     private readonly GetDependencyFlowGraphCommandLineOptions _options;
     private readonly IBarApiClient _barClient;
     private readonly ILogger<GetDependencyFlowGraphCommandLineOptions> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public GetDependencyFlowGraphOperation(
         GetDependencyFlowGraphCommandLineOptions options,
         IBarApiClient barClient,
-        ILogger<GetDependencyFlowGraphCommandLineOptions> logger)
+        ILogger<GetDependencyFlowGraphCommandLineOptions> logger,
+        IConsoleUI consoleUI)
     {
         _options = options;
         _barClient = barClient;
         _logger = logger;
+        _consoleUI = consoleUI;
     }
 
     public override async Task<int> ExecuteAsync()
@@ -61,7 +65,7 @@ internal class GetDependencyFlowGraphOperation : Operation
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (Exception exc)

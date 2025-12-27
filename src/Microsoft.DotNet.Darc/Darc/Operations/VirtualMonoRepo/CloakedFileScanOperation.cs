@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options.VirtualMonoRepo;
 using Microsoft.DotNet.DarcLib.VirtualMonoRepo;
 using Microsoft.Extensions.Logging;
@@ -13,8 +14,9 @@ internal class CloakedFileScanOperation : ScanOperationBase<VmrCloakedFileScanne
     public CloakedFileScanOperation(
         CloakedFileScanOptions options,
         IVmrScanner vmrScanner,
-        ILogger<CloakedFileScanOperation> logger)
-        : base(options, vmrScanner, logger)
+        ILogger<CloakedFileScanOperation> logger,
+        IConsoleUI consoleUI)
+        : base(options, vmrScanner, logger, consoleUI)
     {
     }
 }

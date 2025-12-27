@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.ProductConstructionService.Client;
@@ -23,14 +24,17 @@ internal class GetDefaultChannelsOperation : Operation
     private readonly GetDefaultChannelsCommandLineOptions _options;
     private readonly IBarApiClient _barClient;
     private readonly ILogger<GetDefaultChannelsOperation> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public GetDefaultChannelsOperation(
         GetDefaultChannelsCommandLineOptions options,
         IBarApiClient barClient,
+        IConsoleUI consoleUI,
         ILogger<GetDefaultChannelsOperation> logger)
     {
         _options = options;
         _barClient = barClient;
+        _consoleUI = consoleUI;
         _logger = logger;
     }
 
@@ -43,23 +47,25 @@ internal class GetDefaultChannelsOperation : Operation
     {
         try
         {
-            IEnumerable<DefaultChannel> defaultChannels = await FilterDefaultChannels();
+            var defaultChannels = await _consoleUI.StatusAsync(
+                "Retrieving default channels...",
+                async ctx => await FilterDefaultChannels());
 
             if (!defaultChannels.Any())
             {
-                Console.WriteLine("No matching channels were found.");
+                _consoleUI.WriteWarning("No matching channels were found.");
             }
 
             switch (_options.OutputFormat)
             {
                 case DarcOutputType.json:
-                    Console.WriteLine(JsonConvert.SerializeObject(defaultChannels, Formatting.Indented));
+                    _consoleUI.WriteLine(JsonConvert.SerializeObject(defaultChannels, Formatting.Indented));
                     break;
                 case DarcOutputType.text:
                     // Write out a simple list of each channel's name
                     foreach (DefaultChannel defaultChannel in defaultChannels)
                     {
-                        Console.WriteLine(UxHelpers.GetDefaultChannelDescriptionString(defaultChannel));
+                        _consoleUI.WriteLine(UxHelpers.GetDefaultChannelDescriptionString(defaultChannel));
                     }
                     break;
                 default:
@@ -70,11 +76,12 @@ internal class GetDefaultChannelsOperation : Operation
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError($"Error: Failed to retrieve default channel information: {e.Message}");
             _logger.LogError(e, "Error: Failed to retrieve default channel information.");
             return Constants.ErrorCode;
         }

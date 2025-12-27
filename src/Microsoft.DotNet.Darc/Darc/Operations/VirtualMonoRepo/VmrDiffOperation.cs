@@ -1,4 +1,4 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options.VirtualMonoRepo;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.DarcLib.Helpers;
@@ -34,6 +35,7 @@ internal class VmrDiffOperation : Operation
     private readonly IRemoteFactory _remoteFactory;
     private readonly ISourceMappingParser _sourceMappingParser;
     private readonly ILocalGitRepoFactory _localGitRepoFactory;
+    private readonly IConsoleUI _consoleUI;
 
     public VmrDiffOperation(
         VmrDiffOptions options,
@@ -44,7 +46,8 @@ internal class VmrDiffOperation : Operation
         IVmrPatchHandler patchHandler,
         IRemoteFactory remoteFactory,
         ISourceMappingParser sourceMappingParser,
-        ILocalGitRepoFactory localGitRepoFactory)
+        ILocalGitRepoFactory localGitRepoFactory,
+        IConsoleUI consoleUI)
     {
         _options = options;
         _processManager = processManager;
@@ -55,6 +58,7 @@ internal class VmrDiffOperation : Operation
         _remoteFactory = remoteFactory;
         _sourceMappingParser = sourceMappingParser;
         _localGitRepoFactory = localGitRepoFactory;
+        _consoleUI = consoleUI;
     }
 
     private record Repo(string Remote, string Ref, bool IsLocal, bool IsVmr);
@@ -203,21 +207,21 @@ internal class VmrDiffOperation : Operation
 
         if (_options.NameOnly)
         {
-            Console.WriteLine($"Diffing against VMR {source.Uri} / {source.Sha}");
-            Console.WriteLine(new string('-', 80));
+            _consoleUI.WriteLine($"Diffing against VMR {source.Uri} / {source.Sha}");
+            _consoleUI.WriteLine(new string('-', 80));
 
             try
             {
                 int exitCode = await FileTreeDiffAsync(productRepo, vmrRepo, true);
                 if (exitCode == 0)
                 {
-                    Console.WriteLine("(No differences found)");
+                    _consoleUI.WriteLine("(No differences found)");
                 }
                 return exitCode;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"ERROR: Failed to execute diff against VMR: {ex.Message}");
+                _consoleUI.WriteError($"ERROR: Failed to execute diff against VMR: {ex.Message}");
                 return 1;
             }
         }
@@ -239,8 +243,8 @@ internal class VmrDiffOperation : Operation
             var repoArg = $"{repository.RemoteUri}:{repository.CommitSha}";
             var targetRepo = await ParseRepo(repoArg);
 
-            Console.WriteLine($"[{currentRepo}/{totalRepos}] Diffing {repository.Path} / {repository.CommitSha}");
-            Console.WriteLine(new string('-', 80));
+            _consoleUI.WriteLine($"[{currentRepo}/{totalRepos}] Diffing {repository.Path} / {repository.CommitSha}");
+            _consoleUI.WriteLine(new string('-', 80));
 
             try
             {
@@ -251,18 +255,18 @@ internal class VmrDiffOperation : Operation
                 }
                 else
                 {
-                    Console.WriteLine("(No differences found)");
+                    _consoleUI.WriteLine("(No differences found)");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"ERROR: Failed to execute diff for {repository.Path}: {ex.Message}");
+                _consoleUI.WriteError($"ERROR: Failed to execute diff for {repository.Path}: {ex.Message}");
                 hasAnyDifferences = true;
             }
 
-            Console.WriteLine();
-            Console.WriteLine(new string('=', 80));
-            Console.WriteLine();
+            _consoleUI.WriteLine();
+            _consoleUI.WriteLine(new string('=', 80));
+            _consoleUI.WriteLine();
         }
 
         return hasAnyDifferences ? 1 : 0;
@@ -315,21 +319,21 @@ internal class VmrDiffOperation : Operation
 
         if (_options.NameOnly)
         {
-            Console.WriteLine($"Diffing {repoVersion.Path} / {repoVersion.CommitSha}");
-            Console.WriteLine(new string('-', 80));
+            _consoleUI.WriteLine($"Diffing {repoVersion.Path} / {repoVersion.CommitSha}");
+            _consoleUI.WriteLine(new string('-', 80));
 
             try
             {
                 int exitCode = await FileTreeDiffAsync(targetRepo, vmrRepo, false);
                 if (exitCode == 0)
                 {
-                    Console.WriteLine("(No differences found)");
+                    _consoleUI.WriteLine("(No differences found)");
                 }
                 return exitCode;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"ERROR: Failed to execute diff for {mappingName}: {ex.Message}");
+                _consoleUI.WriteError($"ERROR: Failed to execute diff for {mappingName}: {ex.Message}");
                 return 1;
             }
         }
@@ -659,7 +663,7 @@ internal class VmrDiffOperation : Operation
             {
                 foreach (var file in list)
                 {
-                    Console.WriteLine(file);
+                    _consoleUI.WriteLine(file);
                 }
             }
             else
@@ -680,7 +684,7 @@ internal class VmrDiffOperation : Operation
                 string? line;
                 while ((line = await sr.ReadLineAsync()) != null)
                 {
-                    Console.WriteLine(line);
+                    _consoleUI.WriteLine(line);
                     hadChanges = true;
                 }
             }
@@ -774,7 +778,7 @@ internal class VmrDiffOperation : Operation
 
         foreach (var difference in fileDifferences.Values.OrderBy(v => v))
         {
-            Console.WriteLine(difference);
+            _consoleUI.WriteLine(difference);
         }
 
         return fileDifferences.Count > 0 ? 1 : 0;

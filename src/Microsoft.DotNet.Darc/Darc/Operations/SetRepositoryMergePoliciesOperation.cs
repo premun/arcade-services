@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Maestro.Common;
 using Maestro.MergePolicyEvaluation;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Models.PopUps;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
@@ -24,16 +25,19 @@ internal class SetRepositoryMergePoliciesOperation : Operation
     private readonly IBarApiClient _barClient;
     private readonly IRemoteFactory _remoteFactory;
     private readonly ILogger<SetRepositoryMergePoliciesOperation> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public SetRepositoryMergePoliciesOperation(
         SetRepositoryMergePoliciesCommandLineOptions options,
         IBarApiClient barClient,
         IRemoteFactory remoteFactory,
+        IConsoleUI consoleUI,
         ILogger<SetRepositoryMergePoliciesOperation> logger)
     {
         _options = options;
         _barClient = barClient;
         _remoteFactory = remoteFactory;
+        _consoleUI = consoleUI;
         _logger = logger;
     }
 
@@ -41,14 +45,14 @@ internal class SetRepositoryMergePoliciesOperation : Operation
     {
         if (_options.IgnoreChecks.Any() && !_options.AllChecksSuccessfulMergePolicy)
         {
-            Console.WriteLine($"--ignore-checks must be combined with --all-checks-passed");
+            _consoleUI.WriteError($"--ignore-checks must be combined with --all-checks-passed");
             return Constants.ErrorCode;
         }
 
         var repoType = GitRepoUrlUtils.ParseTypeFromUri(_options.Repository);
         if (repoType == GitRepoType.Local || repoType == GitRepoType.None)
         {
-            Console.WriteLine("Please specify full repository URL (GitHub or AzDO)");
+            _consoleUI.WriteError("Please specify full repository URL (GitHub or AzDO)");
             return Constants.ErrorCode;
         }
 
@@ -152,28 +156,30 @@ internal class SetRepositoryMergePoliciesOperation : Operation
 
         if (!await UxHelpers.VerifyAndConfirmBranchExistsAsync(verifyRemote, repository, branch, !_options.Quiet))
         {
-            Console.WriteLine("Aborting merge policy creation.");
+            _consoleUI.WriteWarning("Aborting merge policy creation.");
             return Constants.ErrorCode;
         }
 
         try
         {
             await _barClient.SetRepositoryMergePoliciesAsync(repository, branch, mergePolicies);
-            Console.WriteLine($"Successfully updated merge policies for {repository}@{branch}.");
+            _consoleUI.WriteSuccess($"Successfully updated merge policies for {repository}@{branch}.");
             return Constants.SuccessCode;
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (RestApiException e) when (e.Response.Status == (int) System.Net.HttpStatusCode.BadRequest)
         {
+            _consoleUI.WriteError($"Failed to set repository auto merge policies: {e.Response.Content}");
             _logger.LogError($"Failed to set repository auto merge policies: {e.Response.Content}");
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError($"Failed to set merge policies.");
             _logger.LogError(e, $"Failed to set merge policies.");
             return Constants.ErrorCode;
         }

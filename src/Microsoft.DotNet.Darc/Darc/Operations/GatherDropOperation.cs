@@ -13,6 +13,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Azure.Core;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.DarcLib.Helpers;
@@ -40,18 +41,21 @@ internal class GatherDropOperation : Operation
     private readonly Lazy<TokenCredential> _azureTokenCredential;
     private readonly ILogger<GatherDropOperation> _logger;
     private readonly IRemoteFactory _remoteFactory;
+    private readonly IConsoleUI _consoleUI;
 
     public GatherDropOperation(
         GatherDropCommandLineOptions options,
         ILogger<GatherDropOperation> logger,
         IBarApiClient barClient,
-        IRemoteFactory remoteFactory)
+        IRemoteFactory remoteFactory,
+        IConsoleUI consoleUI)
     {
         _options = options;
         _azureTokenCredential = new Lazy<TokenCredential>(AzureAuthentication.GetCliCredential);
         _logger = logger;
         _barClient = barClient;
         _remoteFactory = remoteFactory;
+        _consoleUI = consoleUI;
     }
 
     private const string PackagesSubPath = "packages";
@@ -89,7 +93,7 @@ internal class GatherDropOperation : Operation
                 return Constants.ErrorCode;
             }
 
-            Console.WriteLine();
+            _consoleUI.WriteLine();
 
             List<DownloadedBuild> downloadedBuilds = [];
             List<DownloadedAsset> extraDownloadedAssets = [];
@@ -100,7 +104,7 @@ internal class GatherDropOperation : Operation
                 if (!downloadedBuild.Successful)
                 {
                     success = false;
-                    Console.WriteLine($"Failed to download build with id {build.Id}");
+                    _consoleUI.WriteError($"Failed to download build with id {build.Id}");
                     if (!_options.ContinueOnError)
                     {
                         return Constants.ErrorCode;
@@ -120,10 +124,10 @@ internal class GatherDropOperation : Operation
                 }
                 if (downloadedBuild.ExtraDownloadedAssets.Any())
                 {
-                    Console.WriteLine($"Found {downloadedBuild.ExtraDownloadedAssets.Count()} always-download asset(s) in build {build.Id}:");
+                    _consoleUI.WriteLine($"Found {downloadedBuild.ExtraDownloadedAssets.Count()} always-download asset(s) in build {build.Id}:");
                     foreach (var asset in downloadedBuild.ExtraDownloadedAssets)
                     {
-                        Console.WriteLine($"   - {asset.Asset.Name}");
+                        _consoleUI.WriteLine($"   - {asset.Asset.Name}");
                     }
                     extraDownloadedAssets.AddRange(downloadedBuild.ExtraDownloadedAssets);
                 }
@@ -137,21 +141,21 @@ internal class GatherDropOperation : Operation
             // Write the release json
             await WriteReleaseJson(downloadedBuilds, _options.OutputDirectory);
 
-            Console.WriteLine();
+            _consoleUI.WriteLine();
             if (!success)
             {
-                Console.WriteLine("One or more failures attempting to download the drop, please see output.");
+                _consoleUI.WriteError("One or more failures attempting to download the drop, please see output.");
                 return Constants.ErrorCode;
             }
             else
             {
-                Console.WriteLine("Download successful.");
+                _consoleUI.WriteSuccess("Download successful.");
                 return Constants.SuccessCode;
             }
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (Exception e)
@@ -184,12 +188,12 @@ internal class GatherDropOperation : Operation
                 !string.IsNullOrEmpty(_options.Channel) ||
                 !string.IsNullOrEmpty(_options.Commit))
             {
-                Console.WriteLine("--id should not be specified with other options.");
+                _consoleUI.WriteError("--id should not be specified with other options.");
                 return false;
             }
             else if (_options.RootBuildIds.Any(id => id == 0))
             {
-                Console.WriteLine("0 is not a valid root build id");
+                _consoleUI.WriteError("0 is not a valid root build id");
                 return false;
             }
             return true;
@@ -200,7 +204,7 @@ internal class GatherDropOperation : Operation
             if (!(!string.IsNullOrEmpty(_options.Commit) ^
                   !string.IsNullOrEmpty(_options.Channel)))
             {
-                Console.WriteLine("Please specify either --channel or --commit.");
+                _consoleUI.WriteError("Please specify either --channel or --commit.");
                 return false;
             }
             return true;
@@ -225,7 +229,7 @@ internal class GatherDropOperation : Operation
             List<Task<BarBuild>> rootBuildTasks = [];
             foreach (var rootBuildId in _options.RootBuildIds)
             {
-                Console.WriteLine($"Looking up build by id {rootBuildId}");
+                _consoleUI.WriteLine($"Looking up build by id {rootBuildId}");
                 rootBuildTasks.Add(_barClient.GetBuildAsync(rootBuildId));
             }
             return await Task.WhenAll(rootBuildTasks);
@@ -238,41 +242,41 @@ internal class GatherDropOperation : Operation
                 IEnumerable<Channel> desiredChannels = channels.Where(channel => channel.Name.Contains(_options.Channel, StringComparison.OrdinalIgnoreCase));
                 if (desiredChannels.Count() != 1)
                 {
-                    Console.WriteLine($"Channel name {_options.Channel} did not match a unique channel. Available channels:");
+                    _consoleUI.WriteError($"Channel name {_options.Channel} did not match a unique channel. Available channels:");
                     foreach (var channel in channels)
                     {
-                        Console.WriteLine($"  {channel.Name}");
+                        _consoleUI.WriteLine($"  {channel.Name}");
                     }
                     return null;
                 }
                 Channel targetChannel = desiredChannels.First();
-                Console.WriteLine($"Looking up latest build of '{repoUri}' on channel '{targetChannel.Name}'");
+                _consoleUI.WriteLine($"Looking up latest build of '{repoUri}' on channel '{targetChannel.Name}'");
                 var rootBuild = await _barClient.GetLatestBuildAsync(repoUri, targetChannel.Id);
                 if (rootBuild == null)
                 {
-                    Console.WriteLine($"No build of '{repoUri}' found on channel '{targetChannel.Name}'");
+                    _consoleUI.WriteError($"No build of '{repoUri}' found on channel '{targetChannel.Name}'");
                     return null;
                 }
                 return [rootBuild];
             }
             else if (!string.IsNullOrEmpty(_options.Commit))
             {
-                Console.WriteLine($"Looking up builds of {_options.RepoUri}@{_options.Commit}");
+                _consoleUI.WriteLine($"Looking up builds of {_options.RepoUri}@{_options.Commit}");
                 var builds = await _barClient.GetBuildsAsync(_options.RepoUri, _options.Commit);
                 // If more than one is available, print them with their IDs.
                 if (builds.Count() > 1)
                 {
-                    Console.WriteLine($"There were {builds.Count()} potential root builds.  Please select one and pass it with --id");
+                    _consoleUI.WriteLine($"There were {builds.Count()} potential root builds.  Please select one and pass it with --id");
                     foreach (var build in builds)
                     {
-                        Console.WriteLine($"  {build.Id}: {build.AzureDevOpsBuildNumber} @ {build.DateProduced.ToLocalTime()}");
+                        _consoleUI.WriteLine($"  {build.Id}: {build.AzureDevOpsBuildNumber} @ {build.DateProduced.ToLocalTime()}");
                     }
                     return null;
                 }
                 BarBuild rootBuild = builds.SingleOrDefault();
                 if (rootBuild == null)
                 {
-                    Console.WriteLine($"No builds were found of {_options.RepoUri}@{_options.Commit}");
+                    _consoleUI.WriteError($"No builds were found of {_options.RepoUri}@{_options.Commit}");
                     return null;
                 }
                 return [rootBuild];
@@ -409,7 +413,7 @@ internal class GatherDropOperation : Operation
             {
                 if (build.Released)
                 {
-                    Console.WriteLine($"  Skipping download of released build {build.AzureDevOpsBuildNumber} of {build.GetRepository()} @ {build.Commit}");
+                    _consoleUI.WriteLine($"  Skipping download of released build {build.AzureDevOpsBuildNumber} of {build.GetRepository()} @ {build.Commit}");
                 }
             }
             return nonReleasedBuilds;
@@ -429,7 +433,7 @@ internal class GatherDropOperation : Operation
     /// </remarks>
     private async Task<InputBuilds> GatherBuildsToDownloadAsync(IEnumerable<BarBuild> rootBuilds)
     {
-        Console.WriteLine("Determining what builds to download...");
+        _consoleUI.WriteLine("Determining what builds to download...");
 
         if (rootBuilds == null)
         {
@@ -438,7 +442,7 @@ internal class GatherDropOperation : Operation
 
         foreach (BarBuild rootBuild in rootBuilds)
         {
-            Console.WriteLine($"Root build - Build number {rootBuild.AzureDevOpsBuildNumber} of {rootBuild.AzureDevOpsRepository} @ {rootBuild.Commit}");
+            _consoleUI.WriteLine($"Root build - Build number {rootBuild.AzureDevOpsBuildNumber} of {rootBuild.AzureDevOpsRepository} @ {rootBuild.Commit}");
         }
 
         // If transitive (full tree) was not selected, we're done
@@ -448,7 +452,7 @@ internal class GatherDropOperation : Operation
 
             if (!filteredNonTransitiveBuilds.Any())
             {
-                Console.WriteLine("All builds were already released.");
+                _consoleUI.WriteLine("All builds were already released.");
                 return new InputBuilds()
                 {
                     Successful = false
@@ -471,7 +475,7 @@ internal class GatherDropOperation : Operation
         // Flatten for convenience and remove dependencies of types that we don't want if need be.
         if (!_options.IncludeToolset)
         {
-            Console.WriteLine("Filtering toolset dependencies from the graph...");
+            _consoleUI.WriteLine("Filtering toolset dependencies from the graph...");
         }
 
         var buildOptions = new DependencyGraphBuildOptions()
@@ -481,10 +485,10 @@ internal class GatherDropOperation : Operation
             NodeDiff = NodeDiff.None
         };
 
-        Console.WriteLine("Building graph of all dependencies under root builds...");
+        _consoleUI.WriteLine("Building graph of all dependencies under root builds...");
         foreach (BarBuild rootBuild in rootBuilds)
         {
-            Console.WriteLine($"Building graph for {rootBuild.AzureDevOpsBuildNumber} of {rootBuild.GetRepository()} @ {rootBuild.Commit}");
+            _consoleUI.WriteLine($"Building graph for {rootBuild.AzureDevOpsBuildNumber} of {rootBuild.GetRepository()} @ {rootBuild.Commit}");
 
             var rootBuildRepository = rootBuild.GetRepository();
             DependencyGraph graph = await DependencyGraph.BuildRemoteDependencyGraphAsync(
@@ -500,8 +504,8 @@ internal class GatherDropOperation : Operation
             // So as we walk the full list of contributing builds, filter those that are from rootBuild's repo + sha but not the
             // same build id.
 
-            Console.WriteLine($"There are {graph.UniqueDependencies.Count()} unique dependencies in the graph.");
-            Console.WriteLine("Full set of builds in graph:");
+            _consoleUI.WriteLine($"There are {graph.UniqueDependencies.Count()} unique dependencies in the graph.");
+            _consoleUI.WriteLine("Full set of builds in graph:");
             foreach (var build in graph.ContributingBuilds)
             {
                 if (build.GetRepository() == rootBuildRepository &&
@@ -511,7 +515,7 @@ internal class GatherDropOperation : Operation
                     continue;
                 }
 
-                Console.WriteLine($"  Build - {build.AzureDevOpsBuildNumber} of {build.GetRepository()} @ {build.Commit}");
+                _consoleUI.WriteLine($"  Build - {build.AzureDevOpsBuildNumber} of {build.GetRepository()} @ {build.Commit}");
                 builds.Add(build);
             }
 
@@ -525,10 +529,10 @@ internal class GatherDropOperation : Operation
                                                                           !DependenciesAlwaysMissingBuilds.Any(missingNode => node.Repository == missingNode.repo && node.Commit == missingNode.sha)).ToList();
             if (nodesWithNoContributingBuilds.Count != 0)
             {
-                Console.WriteLine("Dependency graph nodes missing builds:");
+                _consoleUI.WriteWarning("Dependency graph nodes missing builds:");
                 foreach (var node in nodesWithNoContributingBuilds)
                 {
-                    Console.WriteLine($"  {node.Repository} @ {node.Commit}");
+                    _consoleUI.WriteLine($"  {node.Repository} @ {node.Commit}");
                 }
 
                 if (!_options.ContinueOnError)
@@ -545,7 +549,7 @@ internal class GatherDropOperation : Operation
 
         if (!filteredBuilds.Any())
         {
-            Console.WriteLine("All builds were already released.");
+            _consoleUI.WriteLine("All builds were already released.");
             return new InputBuilds()
             {
                 Successful = false
@@ -609,7 +613,7 @@ internal class GatherDropOperation : Operation
         ConcurrentBag<DownloadedAsset> extraDownloadedAssets = [];
         var anyShipping = false;
 
-        Console.WriteLine($"Gathering drop for build {build.AzureDevOpsBuildNumber} of {repoUri}");
+        _consoleUI.WriteLine($"Gathering drop for build {build.AzureDevOpsBuildNumber} of {repoUri}");
 
         List<Asset> mustDownloadAssets = [];
         string[] alwaysDownloadRegexes = _options.AlwaysDownloadAssetPatterns.Split(',', StringSplitOptions.RemoveEmptyEntries);
@@ -705,7 +709,7 @@ internal class GatherDropOperation : Operation
                             success = false;
                             if (!_options.ContinueOnError)
                             {
-                                Console.WriteLine($"Aborting download.");
+                                _consoleUI.WriteError($"Aborting download.");
                                 return;
                             }
                         }
@@ -754,7 +758,7 @@ internal class GatherDropOperation : Operation
         var assetNameAndVersion = GetAssetNameForLogging(asset);
         if (!_options.IncludeNonShipping && asset.NonShipping)
         {
-            Console.WriteLine($"  Skipping non-shipping asset {assetNameAndVersion}");
+            _consoleUI.WriteLine($"  Skipping non-shipping asset {assetNameAndVersion}");
             return null;
         }
 
@@ -824,7 +828,7 @@ internal class GatherDropOperation : Operation
 
             if (downloadedAsset.Successful)
             {
-                Console.Write(downloadOutput.ToString());
+                _consoleUI.Write(downloadOutput.ToString());
                 return downloadedAsset;
             }
         }
@@ -836,7 +840,7 @@ internal class GatherDropOperation : Operation
         {
             downloadOutput.AppendLine($"      {error}");
         }
-        Console.Write(downloadOutput.ToString());
+        _consoleUI.Write(downloadOutput.ToString());
 
         return downloadedAsset;
     }
@@ -1525,7 +1529,7 @@ internal class GatherDropOperation : Operation
     /// we can get occasional deletion failures. All of them seen so far are UnauthorizedAccessExceptions
     /// </summary>
     /// <param name="filePath">Full path to the file to delete.</param>
-    private static async Task DeleteFileWithRetryAsync(string filePath)
+    private async Task DeleteFileWithRetryAsync(string filePath)
     {
         await ExponentialRetry.Default.RetryAsync(
             () =>
@@ -1535,7 +1539,7 @@ internal class GatherDropOperation : Operation
                     File.Delete(filePath);
                 }
             },
-            ex => Console.WriteLine($"Failed to delete {filePath}: {ex.Message}"),
+            ex => _logger.LogWarning($"Failed to delete {filePath}: {ex.Message}"),
             ex => ex is UnauthorizedAccessException);
     }
 }

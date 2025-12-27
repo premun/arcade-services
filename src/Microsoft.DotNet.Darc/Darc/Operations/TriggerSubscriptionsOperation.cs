@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.ProductConstructionService.Client;
@@ -20,14 +21,17 @@ internal class TriggerSubscriptionsOperation : Operation
     private readonly TriggerSubscriptionsCommandLineOptions _options;
     private readonly IBarApiClient _barClient;
     private readonly ILogger<TriggerSubscriptionsOperation> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public TriggerSubscriptionsOperation(
         TriggerSubscriptionsCommandLineOptions options,
         IBarApiClient barClient,
+        IConsoleUI consoleUI,
         ILogger<TriggerSubscriptionsOperation> logger)
     {
         _options = options;
         _barClient = barClient;
+        _consoleUI = consoleUI;
         _logger = logger;
     }
 
@@ -52,7 +56,7 @@ internal class TriggerSubscriptionsOperation : Operation
                 }
                 catch (RestApiException e) when (e.Response.Status == (int) HttpStatusCode.NotFound)
                 {
-                    Console.WriteLine($"Subscription with id '{_options.Id}' was not found.");
+                    _consoleUI.WriteError($"Subscription with id '{_options.Id}' was not found.");
                     return Constants.ErrorCode;
                 }
             }
@@ -60,7 +64,7 @@ internal class TriggerSubscriptionsOperation : Operation
             {
                 if (!_options.HasAnyFilters())
                 {
-                    Console.WriteLine($"Please specify one or more filters to select which subscriptions should be triggered (see help).");
+                    _consoleUI.WriteError($"Please specify one or more filters to select which subscriptions should be triggered (see help).");
                     return Constants.ErrorCode;
                 }
 
@@ -68,7 +72,7 @@ internal class TriggerSubscriptionsOperation : Operation
 
                 if (!subscriptions.Any())
                 {
-                    Console.WriteLine("No subscriptions found matching the specified criteria.");
+                    _consoleUI.WriteWarning("No subscriptions found matching the specified criteria.");
                     return Constants.ErrorCode;
                 }
 
@@ -80,18 +84,18 @@ internal class TriggerSubscriptionsOperation : Operation
                 var specificBuild = await _barClient.GetBuildAsync(_options.Build);
                 if (specificBuild == null)
                 {
-                    Console.WriteLine($"No build found in the BAR with id '{_options.Build}'");
+                    _consoleUI.WriteError($"No build found in the BAR with id '{_options.Build}'");
                     return Constants.ErrorCode;
                 }
 
                 // If the user specified repo and a build number, error out if anything doesn't match.
                 if (!_options.SubscriptionParameterMatches(_options.SourceRepository, specificBuild.GitHubRepository))
                 {
-                    Console.WriteLine($"Build #{_options.Build} was made with repo {specificBuild.GitHubRepository} and does not match provided value ({_options.SourceRepository})");
+                    _consoleUI.WriteError($"Build #{_options.Build} was made with repo {specificBuild.GitHubRepository} and does not match provided value ({_options.SourceRepository})");
                     return Constants.ErrorCode;
                 }
 
-                Console.WriteLine($"Subscription updates will use Build # {_options.Build} instead of latest available");
+                _consoleUI.WriteInfo($"Subscription updates will use Build # {_options.Build} instead of latest available");
             }
 
             // Filter away subscriptions that are disabled
@@ -100,42 +104,42 @@ internal class TriggerSubscriptionsOperation : Operation
 
             if (disabledSubscriptions.Count != 0)
             {
-                Console.WriteLine($"The following {disabledSubscriptions.Count} subscription(s) are disabled and will not be triggered");
+                _consoleUI.WriteWarning($"The following {disabledSubscriptions.Count} subscription(s) are disabled and will not be triggered");
                 foreach (var subscription in disabledSubscriptions)
                 {
-                    Console.WriteLine($"  {UxHelpers.GetSubscriptionDescription(subscription)}");
+                    _consoleUI.WriteLine($"  {UxHelpers.GetSubscriptionDescription(subscription)}");
                 }
             }
 
             if (subscriptionsToTrigger.Count == 0)
             {
-                Console.WriteLine("No enabled subscriptions found matching the specified criteria.");
+                _consoleUI.WriteWarning("No enabled subscriptions found matching the specified criteria.");
                 return Constants.ErrorCode;
             }
 
             if (!noConfirm)
             {
                 // Print out the list of subscriptions about to be triggered.
-                Console.WriteLine($"Will trigger the following {subscriptionsToTrigger.Count} subscriptions...");
+                _consoleUI.WriteInfo($"Will trigger the following {subscriptionsToTrigger.Count} subscriptions...");
                 foreach (var subscription in subscriptionsToTrigger)
                 {
-                    Console.WriteLine($"  {UxHelpers.GetSubscriptionDescription(subscription)}");
+                    _consoleUI.WriteLine($"  {UxHelpers.GetSubscriptionDescription(subscription)}");
                 }
 
                 if (!UxHelpers.PromptForYesNo("Continue?"))
                 {
-                    Console.WriteLine($"No subscriptions triggered, exiting.");
+                    _consoleUI.WriteWarning($"No subscriptions triggered, exiting.");
                     return Constants.ErrorCode;
                 }
             }
 
-            Console.Write($"Triggering {subscriptionsToTrigger.Count} subscriptions...{(noConfirm ? Environment.NewLine : "")}");
+            _consoleUI.Write($"Triggering {subscriptionsToTrigger.Count} subscriptions...{(noConfirm ? Environment.NewLine : "")}");
             foreach (var subscription in subscriptionsToTrigger)
             {
                 // If noConfirm was passed, print out the subscriptions as we go
                 if (noConfirm)
                 {
-                    Console.WriteLine($"  {UxHelpers.GetSubscriptionDescription(subscription)}");
+                    _consoleUI.WriteLine($"  {UxHelpers.GetSubscriptionDescription(subscription)}");
                 }
                 if (_options.Build > 0)
                 {
@@ -146,17 +150,18 @@ internal class TriggerSubscriptionsOperation : Operation
                     await _barClient.TriggerSubscriptionAsync(subscription.Id, _options.Force);
                 }
             }
-            Console.WriteLine("done");
+            _consoleUI.WriteSuccess("done");
 
             return Constants.SuccessCode;
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError("Unexpected error while triggering subscriptions.");
             _logger.LogError(e, "Unexpected error while triggering subscriptions.");
             return Constants.ErrorCode;
         }

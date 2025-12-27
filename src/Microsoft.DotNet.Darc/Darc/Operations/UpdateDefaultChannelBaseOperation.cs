@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.ProductConstructionService.Client.Models;
@@ -16,12 +17,14 @@ namespace Microsoft.DotNet.Darc.Operations;
 internal abstract class UpdateDefaultChannelBaseOperation : Operation
 {
     protected readonly IBarApiClient _barClient;
+    protected readonly IConsoleUI _consoleUI;
     private readonly IUpdateDefaultChannelBaseCommandLineOptions _options;
 
-    public UpdateDefaultChannelBaseOperation(IUpdateDefaultChannelBaseCommandLineOptions options, IBarApiClient barClient)
+    public UpdateDefaultChannelBaseOperation(IUpdateDefaultChannelBaseCommandLineOptions options, IBarApiClient barClient, IConsoleUI consoleUI)
     {
         _options = options;
         _barClient = barClient;
+        _consoleUI = consoleUI;
     }
 
     /// <summary>
@@ -39,7 +42,7 @@ internal abstract class UpdateDefaultChannelBaseOperation : Operation
             DefaultChannel defaultChannel = potentialDefaultChannels.SingleOrDefault(d => d.Id == _options.Id);
             if (defaultChannel == null)
             {
-                Console.WriteLine($"Could not find a default channel with id {_options.Id}");
+                _consoleUI.WriteError($"Could not find a default channel with id {_options.Id}");
             }
             return defaultChannel;
         }
@@ -47,7 +50,7 @@ internal abstract class UpdateDefaultChannelBaseOperation : Operation
                  string.IsNullOrEmpty(_options.Channel) ||
                  string.IsNullOrEmpty(_options.Branch))
         {
-            Console.WriteLine("Please specify either the default channel id with --id or a combination of --channel, --branch and --repo");
+            _consoleUI.WriteError("Please specify either the default channel id with --id or a combination of --channel, --branch and --repo");
             return null;
         }
 
@@ -62,15 +65,15 @@ internal abstract class UpdateDefaultChannelBaseOperation : Operation
 
         if (!matchingChannels.Any())
         {
-            Console.WriteLine($"No channels found matching the specified criteria.");
+            _consoleUI.WriteError($"No channels found matching the specified criteria.");
             return null;
         }
         else if (matchingChannels.Count() != 1)
         {
-            Console.WriteLine($"More than one channel matching the specified criteria. Please change your options to be more specific.");
+            _consoleUI.WriteError($"More than one channel matching the specified criteria. Please change your options to be more specific.");
             foreach (DefaultChannel defaultChannel in matchingChannels)
             {
-                Console.WriteLine($"    {UxHelpers.GetDefaultChannelDescriptionString(defaultChannel)}");
+                _consoleUI.WriteLine($"    {UxHelpers.GetDefaultChannelDescriptionString(defaultChannel)}");
             }
             return null;
         }

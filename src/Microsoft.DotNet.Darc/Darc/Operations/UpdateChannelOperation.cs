@@ -4,6 +4,7 @@
 using System;
 using System.Net;
 using System.Threading.Tasks;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.ProductConstructionService.Client;
@@ -17,14 +18,17 @@ internal class UpdateChannelOperation : Operation
     private readonly UpdateChannelCommandLineOptions _options;
     private readonly IBarApiClient _barClient;
     private readonly ILogger<UpdateChannelOperation> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public UpdateChannelOperation(
         UpdateChannelCommandLineOptions options,
         IBarApiClient barClient,
+        IConsoleUI consoleUI,
         ILogger<UpdateChannelOperation> logger)
     {
         _options = options;
         _barClient = barClient;
+        _consoleUI = consoleUI;
         _logger = logger;
     }
 
@@ -39,7 +43,7 @@ internal class UpdateChannelOperation : Operation
             // Validate that at least one of name or classification is provided
             if (string.IsNullOrEmpty(_options.Name) && string.IsNullOrEmpty(_options.Classification))
             {
-                _logger.LogError("Either --name or --classification (or both) must be specified.");
+                _consoleUI.WriteError("Either --name or --classification (or both) must be specified.");
                 return Constants.ErrorCode;
             }
 
@@ -47,17 +51,27 @@ internal class UpdateChannelOperation : Operation
             var channel = await _barClient.GetChannelAsync(_options.Id);
             if (channel == null)
             {
-                _logger.LogError("Could not find a channel with id '{id}'", _options.Id);
+                _consoleUI.WriteError($"Could not find a channel with id '{_options.Id}'");
                 return Constants.ErrorCode;
             }
 
             // Update the channel with the specified information
-            var updatedChannel = await _barClient.UpdateChannelAsync(_options.Id, _options.Name, _options.Classification);
+            var updatedChannel = await _consoleUI.StatusAsync(
+                "Updating channel...",
+                async ctx =>
+                {
+                    ctx.Log($"Channel ID: {_options.Id}");
+                    if (!string.IsNullOrEmpty(_options.Name))
+                        ctx.Log($"New name: {_options.Name}");
+                    if (!string.IsNullOrEmpty(_options.Classification))
+                        ctx.Log($"New classification: {_options.Classification}");
+                    return await _barClient.UpdateChannelAsync(_options.Id, _options.Name, _options.Classification);
+                });
 
             switch (_options.OutputFormat)
             {
                 case DarcOutputType.json:
-                    Console.WriteLine(JsonConvert.SerializeObject(
+                    _consoleUI.WriteLine(JsonConvert.SerializeObject(
                         new
                         {
                             id = updatedChannel.Id,
@@ -67,9 +81,9 @@ internal class UpdateChannelOperation : Operation
                         Formatting.Indented));
                     break;
                 case DarcOutputType.text:
-                    Console.WriteLine($"Successfully updated channel '{_options.Id}':");
-                    Console.WriteLine($"  Name: {updatedChannel.Name}");
-                    Console.WriteLine($"  Classification: {updatedChannel.Classification}");
+                    _consoleUI.WriteSuccess($"Successfully updated channel '{_options.Id}':");
+                    _consoleUI.WriteLine($"  Name: {updatedChannel.Name}");
+                    _consoleUI.WriteLine($"  Classification: {updatedChannel.Classification}");
                     break;
                 default:
                     throw new NotImplementedException($"Output type {_options.OutputFormat} not supported by update-channel");
@@ -79,16 +93,17 @@ internal class UpdateChannelOperation : Operation
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (RestApiException e) when (e.Response.Status == (int)HttpStatusCode.Conflict)
         {
-            _logger.LogError($"A channel with the specified name already exists.");
+            _consoleUI.WriteError($"A channel with the specified name already exists.");
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError("Failed to update channel.");
             _logger.LogError(e, "Error: Failed to update channel.");
             return Constants.ErrorCode;
         }

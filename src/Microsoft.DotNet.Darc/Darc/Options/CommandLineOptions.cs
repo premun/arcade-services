@@ -7,6 +7,7 @@ using CommandLine;
 using Maestro.Common;
 using Maestro.Common.AzureDevOpsTokens;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Operations;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.DarcLib.Helpers;
@@ -175,6 +176,15 @@ public abstract class CommandLineOptions : ICommandLineOptions
             s.GetRequiredService<ILogger<GitHubCliTokenProvider>>(),
             GitHubPat));
         services.TryAddSingleton<ICommandLineOptions>(_ => this);
+        // Register console UI based on mode - use plain console for CI mode or JSON output
+        services.TryAddSingleton<IConsoleUI>(sp =>
+        {
+            if (IsCi || OutputFormat == DarcOutputType.json)
+            {
+                return new PlainConsoleUI(sp.GetRequiredService<ILogger>());
+            }
+            return new SpectreConsoleUI();
+        });
         // Add add an empty VmrInfo that won't actually be used in non VMR commands
         services.TryAddSingleton<ISourceMappingParser, SourceMappingParser>();
         services.TryAddSingleton<IVmrInfo>(sp =>

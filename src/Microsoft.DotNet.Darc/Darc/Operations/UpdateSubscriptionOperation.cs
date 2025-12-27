@@ -8,6 +8,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Maestro.MergePolicyEvaluation;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Models.PopUps;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
@@ -24,16 +25,19 @@ internal class UpdateSubscriptionOperation : SubscriptionOperationBase
 {
     private readonly UpdateSubscriptionCommandLineOptions _options;
     private readonly IGitRepoFactory _gitRepoFactory;
+    private readonly IConsoleUI _consoleUI;
 
     public UpdateSubscriptionOperation(
         UpdateSubscriptionCommandLineOptions options,
         IBarApiClient barClient,
         DarcLib.IGitRepoFactory gitRepoFactory,
         IConfigurationRepositoryManager configurationRepositoryManager,
-        ILogger<UpdateSubscriptionOperation> logger) : base(barClient, configurationRepositoryManager, logger)
+        ILogger<UpdateSubscriptionOperation> logger,
+        IConsoleUI consoleUI) : base(barClient, configurationRepositoryManager, logger)
     {
         _options = options;
         _gitRepoFactory = gitRepoFactory;
+        _consoleUI = consoleUI;
     }
 
     /// <summary>
@@ -317,7 +321,7 @@ internal class UpdateSubscriptionOperation : SubscriptionOperationBase
                 }
                 catch (ArgumentException)
                 {
-                    Console.WriteLine("Aborting subscription update.");
+                    _consoleUI.WriteError("Aborting subscription update.");
                     return Constants.ErrorCode;
                 }
             }
@@ -354,7 +358,7 @@ internal class UpdateSubscriptionOperation : SubscriptionOperationBase
                     _options.Id,
                     subscriptionToUpdate);
 
-                Console.WriteLine($"Successfully updated subscription with id '{updatedSubscription.Id}'.");
+                _consoleUI.WriteSuccess($"Successfully updated subscription with id '{updatedSubscription.Id}'.");
 
                 // Determine whether the subscription should be triggered.
                 if (!_options.NoTriggerOnUpdate)
@@ -376,7 +380,7 @@ internal class UpdateSubscriptionOperation : SubscriptionOperationBase
                     if (triggerAutomatically)
                     {
                         await _barClient.TriggerSubscriptionAsync(updatedSubscription.Id);
-                        Console.WriteLine($"Subscription '{updatedSubscription.Id}' triggered.");
+                        _consoleUI.WriteSuccess($"Subscription '{updatedSubscription.Id}' triggered.");
                     }
                 }
             }
@@ -385,7 +389,7 @@ internal class UpdateSubscriptionOperation : SubscriptionOperationBase
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (RestApiException e) when (e.Response.Status == (int) System.Net.HttpStatusCode.BadRequest)

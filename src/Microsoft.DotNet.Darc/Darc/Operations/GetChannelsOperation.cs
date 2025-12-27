@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.ProductConstructionService.Client;
@@ -20,14 +21,17 @@ internal class GetChannelsOperation : Operation
     private readonly GetChannelsCommandLineOptions _options;
     private readonly IBarApiClient _barClient;
     private readonly ILogger<GetChannelOperation> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public GetChannelsOperation(
         GetChannelsCommandLineOptions options,
         IBarApiClient barClient,
+        IConsoleUI consoleUI,
         ILogger<GetChannelOperation> logger)
     {
         _options = options;
         _barClient = barClient;
+        _consoleUI = consoleUI;
         _logger = logger;
     }
 
@@ -40,7 +44,10 @@ internal class GetChannelsOperation : Operation
     {
         try
         {
-            var allChannels = await _barClient.GetChannelsAsync();
+            var allChannels = await _consoleUI.StatusAsync(
+                "Retrieving channels...",
+                async ctx => await _barClient.GetChannelsAsync());
+
             switch (_options.OutputFormat)
             {
                 case DarcOutputType.json:
@@ -57,17 +64,18 @@ internal class GetChannelsOperation : Operation
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError($"Error: Failed to retrieve channels: {e.Message}");
             _logger.LogError(e, "Error: Failed to retrieve channels");
             return Constants.ErrorCode;
         }
     }
 
-    private static void WriteJsonChannelList(IEnumerable<Channel> allChannels)
+    private void WriteJsonChannelList(IEnumerable<Channel> allChannels)
     {
         var channelJson = new
         {
@@ -79,24 +87,24 @@ internal class GetChannelsOperation : Operation
                 })
         };
 
-        Console.WriteLine(JsonConvert.SerializeObject(channelJson, Formatting.Indented));
+        _consoleUI.WriteLine(JsonConvert.SerializeObject(channelJson, Formatting.Indented));
     }
 
-    private static void WriteYamlChannelList(IEnumerable<Channel> allChannels)
+    private void WriteYamlChannelList(IEnumerable<Channel> allChannels)
     {
         var categories = ChannelCategorizer.CategorizeChannels(allChannels);
         
         foreach (var category in categories)
         {
-            Console.WriteLine($"{category.Name}:");
+            _consoleUI.WriteLine($"{category.Name}:");
             foreach (var channel in category.Channels.OrderBy(c => c.Name))
             {
                 // Pad so that id's up to 9999 will result in consistent
                 // listing
                 string idPrefix = $"({channel.Id})".PadRight(7);
-                Console.WriteLine($"  {idPrefix}{channel.Name}");
+                _consoleUI.WriteLine($"  {idPrefix}{channel.Name}");
             }
-            Console.WriteLine(); // Empty line between categories
+            _consoleUI.WriteLine(); // Empty line between categories
         }
     }
 }

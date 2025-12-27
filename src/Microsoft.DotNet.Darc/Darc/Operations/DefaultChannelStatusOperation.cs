@@ -3,6 +3,7 @@
 
 using System;
 using System.Threading.Tasks;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.ProductConstructionService.Client;
@@ -19,8 +20,9 @@ internal class DefaultChannelStatusOperation : UpdateDefaultChannelBaseOperation
     public DefaultChannelStatusOperation(
         DefaultChannelStatusCommandLineOptions options,
         IBarApiClient barClient,
+        IConsoleUI consoleUI,
         ILogger<DefaultChannelStatusOperation> logger)
-        : base(options, barClient)
+        : base(options, barClient, consoleUI)
     {
         _options = options;
         _logger = logger;
@@ -34,7 +36,7 @@ internal class DefaultChannelStatusOperation : UpdateDefaultChannelBaseOperation
         if ((_options.Enable && _options.Disable) ||
             (!_options.Enable && !_options.Disable))
         {
-            Console.WriteLine("Please specify either --enable or --disable");
+            _consoleUI.WriteError("Please specify either --enable or --disable");
             return Constants.ErrorCode;
         }
 
@@ -51,7 +53,7 @@ internal class DefaultChannelStatusOperation : UpdateDefaultChannelBaseOperation
             {
                 if (resolvedChannel.Enabled)
                 {
-                    Console.WriteLine($"Default channel association is already enabled");
+                    _consoleUI.WriteInfo($"Default channel association is already enabled");
                     return Constants.ErrorCode;
                 }
                 enabled = true;
@@ -60,7 +62,7 @@ internal class DefaultChannelStatusOperation : UpdateDefaultChannelBaseOperation
             {
                 if (!resolvedChannel.Enabled)
                 {
-                    Console.WriteLine($"Default channel association is already disabled");
+                    _consoleUI.WriteInfo($"Default channel association is already disabled");
                     return Constants.ErrorCode;
                 }
                 enabled = false;
@@ -68,17 +70,18 @@ internal class DefaultChannelStatusOperation : UpdateDefaultChannelBaseOperation
 
             await _barClient.UpdateDefaultChannelAsync(resolvedChannel.Id, enabled: enabled);
 
-            Console.WriteLine($"Default channel association has been {(enabled ? "enabled" : "disabled")}.");
+            _consoleUI.WriteSuccess($"Default channel association has been {(enabled ? "enabled" : "disabled")}.");
 
             return Constants.SuccessCode;
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError("Failed enable/disable default channel association.");
             _logger.LogError(e, "Error: Failed enable/disable default channel association.");
             return Constants.ErrorCode;
         }

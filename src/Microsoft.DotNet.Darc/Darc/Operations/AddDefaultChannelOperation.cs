@@ -4,6 +4,7 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.ProductConstructionService.Client;
@@ -18,17 +19,20 @@ internal class AddDefaultChannelOperation : Operation
     private readonly ILogger<AddDefaultChannelOperation> _logger;
     private readonly IBarApiClient _barClient;
     private readonly IRemoteFactory _remoteFactory;
+    private readonly IConsoleUI _consoleUI;
 
     public AddDefaultChannelOperation(
         AddDefaultChannelCommandLineOptions options,
         ILogger<AddDefaultChannelOperation> logger,
         IBarApiClient barClient,
-        IRemoteFactory remoteFactory)
+        IRemoteFactory remoteFactory,
+        IConsoleUI consoleUI)
     {
         _options = options;
         _logger = logger;
         _barClient = barClient;
         _remoteFactory = remoteFactory;
+        _consoleUI = consoleUI;
     }
 
     public override async Task<int> ExecuteAsync()
@@ -42,21 +46,31 @@ internal class AddDefaultChannelOperation : Operation
 
             if (!(await UxHelpers.VerifyAndConfirmBranchExistsAsync(repoRemote, _options.Repository, _options.Branch, !_options.NoConfirmation)))
             {
-                Console.WriteLine("Aborting default channel creation.");
+                _consoleUI.WriteWarning("Aborting default channel creation.");
                 return Constants.ErrorCode;
             }
 
-            await _barClient.AddDefaultChannelAsync(_options.Repository, _options.Branch, _options.Channel);
+            await _consoleUI.StatusAsync(
+                $"Adding default channel association...",
+                async ctx =>
+                {
+                    ctx.Log($"Repository: {_options.Repository}");
+                    ctx.Log($"Branch: {_options.Branch}");
+                    ctx.Log($"Channel: {_options.Channel}");
+                    await _barClient.AddDefaultChannelAsync(_options.Repository, _options.Branch, _options.Channel);
+                });
 
+            _consoleUI.WriteSuccess("Default channel association added successfully.");
             return Constants.SuccessCode;
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError($"Error: Failed to add a new default channel association: {e.Message}");
             _logger.LogError(e, "Error: Failed to add a new default channel association.");
             return Constants.ErrorCode;
         }

@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.ProductConstructionService.Client;
@@ -19,14 +20,17 @@ internal class GetRepositoryMergePoliciesOperation : Operation
     private readonly GetRepositoryMergePoliciesCommandLineOptions _options;
     private readonly IBarApiClient _barClient;
     private readonly ILogger<GetRepositoryMergePoliciesOperation> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public GetRepositoryMergePoliciesOperation(
         GetRepositoryMergePoliciesCommandLineOptions options,
         IBarApiClient barClient,
+        IConsoleUI consoleUI,
         ILogger<GetRepositoryMergePoliciesOperation> logger)
     {
         _options = options;
         _barClient = barClient;
+        _consoleUI = consoleUI;
         _logger = logger;
     }
 
@@ -54,7 +58,7 @@ internal class GetRepositoryMergePoliciesOperation : Operation
                 int difference = filteredRepositories.Count() - targetedRepositories.Count();
                 if (difference != 0)
                 {
-                    Console.WriteLine($"Filtered {difference} policies for branches not targeted by an active batchable subscription. To include, pass --all.{Environment.NewLine}");
+                    _consoleUI.WriteInfo($"Filtered {difference} policies for branches not targeted by an active batchable subscription. To include, pass --all.{Environment.NewLine}");
                 }
 
                 filteredRepositories = targetedRepositories;
@@ -62,19 +66,20 @@ internal class GetRepositoryMergePoliciesOperation : Operation
 
             foreach (var repository in filteredRepositories)
             {
-                Console.WriteLine($"{repository.Repository} @ {repository.Branch}");
-                Console.Write(UxHelpers.GetMergePoliciesDescription(repository.MergePolicies));
+                _consoleUI.WriteLine($"{repository.Repository} @ {repository.Branch}");
+                _consoleUI.Write(UxHelpers.GetMergePoliciesDescription(repository.MergePolicies));
             }
 
             return Constants.SuccessCode;
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError("Failed to retrieve repositories");
             _logger.LogError(e, "Error: Failed to retrieve repositories");
             return Constants.ErrorCode;
         }

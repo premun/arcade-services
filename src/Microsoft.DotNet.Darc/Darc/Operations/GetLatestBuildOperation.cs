@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.ProductConstructionService.Client;
@@ -17,13 +18,16 @@ internal class GetLatestBuildOperation : Operation
 {
     private readonly GetLatestBuildCommandLineOptions _options;
     private readonly IBarApiClient _barClient;
+    private readonly IConsoleUI _consoleUI;
 
     public GetLatestBuildOperation(
         GetLatestBuildCommandLineOptions options,
-        IBarApiClient barClient)
+        IBarApiClient barClient,
+        IConsoleUI consoleUI)
     {
         _options = options;
         _barClient = barClient;
+        _consoleUI = consoleUI;
     }
 
     /// <summary>
@@ -34,7 +38,6 @@ internal class GetLatestBuildOperation : Operation
     {
         // We only print to console if the output format is not JSON
         var outputJson = _options.OutputFormat == DarcOutputType.json;
-        var console = outputJson ? TextWriter.Null : Console.Out;
 
         try
         {
@@ -58,7 +61,10 @@ internal class GetLatestBuildOperation : Operation
 
             if (channels.Count == 0)
             {
-                console.WriteLine($"Could not find a channel with name containing '{_options.Channel}'");
+                if (!outputJson)
+                {
+                    _consoleUI.WriteWarning($"Could not find a channel with name containing '{_options.Channel}'");
+                }
                 return Constants.ErrorCode;
             }
 
@@ -71,21 +77,24 @@ internal class GetLatestBuildOperation : Operation
 
             if (latestBuilds.Count == 0)
             {
-                console.WriteLine("No latest build found matching the specified criteria");
+                if (!outputJson)
+                {
+                    _consoleUI.WriteWarning("No latest build found matching the specified criteria");
+                }
                 return Constants.ErrorCode;
             }
 
             if (outputJson)
             {
-                Console.WriteLine("[");
-                Console.WriteLine(string.Join(
+                _consoleUI.WriteLine("[");
+                _consoleUI.WriteLine(string.Join(
                     "," + Environment.NewLine,
                     latestBuilds.Select(UxHelpers.GetJsonBuildDescription)));
-                Console.WriteLine("]");
+                _consoleUI.WriteLine("]");
             }
             else
             {
-                console.WriteLine(string.Join(
+                _consoleUI.WriteLine(string.Join(
                     Environment.NewLine + Environment.NewLine,
                     latestBuilds.Select(UxHelpers.GetTextBuildDescription)));
             }
@@ -94,12 +103,18 @@ internal class GetLatestBuildOperation : Operation
         }
         catch (AuthenticationException e)
         {
-            console.WriteLine(e.Message);
+            if (!outputJson)
+            {
+                _consoleUI.WriteError(e.Message);
+            }
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
-            console.WriteLine("Failed to retrieve latest build: " + e);
+            if (!outputJson)
+            {
+                _consoleUI.WriteError("Failed to retrieve latest build: " + e.Message);
+            }
             return Constants.ErrorCode;
         }
     }

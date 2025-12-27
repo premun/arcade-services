@@ -4,6 +4,7 @@
 using System;
 using System.Threading.Tasks;
 using Maestro.Common;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.Extensions.Logging;
@@ -15,14 +16,17 @@ internal class VerifyOperation : Operation
     private readonly VerifyCommandLineOptions _options;
     private readonly IRemoteTokenProvider _remoteTokenProvider;
     private readonly ILogger<VerifyOperation> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public VerifyOperation(
         VerifyCommandLineOptions options,
         IRemoteTokenProvider remoteTokenProvider,
+        IConsoleUI consoleUI,
         ILogger<VerifyOperation> logger)
     {
         _options = options;
         _remoteTokenProvider = remoteTokenProvider;
+        _consoleUI = consoleUI;
         _logger = logger;
     }
 
@@ -37,16 +41,25 @@ internal class VerifyOperation : Operation
 
         try
         {
-            if (!await local.Verify())
+            var result = await _consoleUI.StatusAsync(
+                "Verifying dependencies...",
+                async ctx =>
+                {
+                    ctx.Log("Checking dependency structure");
+                    return await local.Verify();
+                });
+
+            if (!result)
             {
-                Console.WriteLine("Dependency verification failed.");
+                _consoleUI.WriteError("Dependency verification failed.");
                 return Constants.ErrorCode;
             }
-            Console.WriteLine("Dependency verification succeeded.");
+            _consoleUI.WriteSuccess("Dependency verification succeeded.");
             return Constants.SuccessCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError("Failed to verify repository dependency state.");
             _logger.LogError(e, "Error: Failed to verify repository dependency state.");
             return Constants.ErrorCode;
         }

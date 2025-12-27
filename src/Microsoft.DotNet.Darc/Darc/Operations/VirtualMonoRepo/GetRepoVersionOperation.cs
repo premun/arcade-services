@@ -4,6 +4,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options.VirtualMonoRepo;
 using Microsoft.DotNet.DarcLib.Models.VirtualMonoRepo;
 using Microsoft.DotNet.DarcLib.VirtualMonoRepo;
@@ -17,15 +18,18 @@ internal class GetRepoVersionOperation : Operation
     private readonly GetRepoVersionCommandLineOptions _options;
     private readonly IVmrDependencyTracker _dependencyTracker;
     private readonly ILogger<GetRepoVersionOperation> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public GetRepoVersionOperation(
         GetRepoVersionCommandLineOptions options,
         IVmrDependencyTracker dependencyTracker,
-        ILogger<GetRepoVersionOperation> logger)
+        ILogger<GetRepoVersionOperation> logger,
+        IConsoleUI consoleUI)
     {
         _options = options;
         _dependencyTracker = dependencyTracker;
         _logger = logger;
+        _consoleUI = consoleUI;
     }
 
     public override async Task<int> ExecuteAsync()
@@ -50,7 +54,7 @@ internal class GetRepoVersionOperation : Operation
         foreach (var repo in repositories)
         {
             var paddedRepoName = repo.PadRight(maxRepoNameLength);
-            Console.WriteLine($"{paddedRepoName} {GetVersion(repo)}");
+            _consoleUI.WriteLine($"{paddedRepoName} {GetVersion(repo)}");
         }
 
         return 0;

@@ -8,6 +8,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Maestro.MergePolicyEvaluation;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Models.PopUps;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
@@ -26,6 +27,7 @@ internal class AddSubscriptionOperation : SubscriptionOperationBase
     private readonly AddSubscriptionCommandLineOptions _options;
     private readonly IGitRepoFactory _gitRepoFactory;
     private readonly IRemoteFactory _remoteFactory;
+    private readonly IConsoleUI _consoleUI;
 
     public AddSubscriptionOperation(
         AddSubscriptionCommandLineOptions options,
@@ -33,12 +35,14 @@ internal class AddSubscriptionOperation : SubscriptionOperationBase
         IBarApiClient barClient,
         IRemoteFactory remoteFactory,
         IGitRepoFactory gitRepoFactory,
-        IConfigurationRepositoryManager configRepoManager)
+        IConfigurationRepositoryManager configRepoManager,
+        IConsoleUI consoleUI)
         : base(barClient, configRepoManager, logger)
     {
         _options = options;
         _gitRepoFactory = gitRepoFactory;
-        _remoteFactory = remoteFactory; 
+        _remoteFactory = remoteFactory;
+        _consoleUI = consoleUI;
     }
 
     /// <summary>
@@ -151,7 +155,7 @@ internal class AddSubscriptionOperation : SubscriptionOperationBase
 
         if (_options.Batchable && mergePolicies.Count > 0)
         {
-            Console.WriteLine("Batchable subscriptions cannot be combined with merge policies. " +
+            _consoleUI.WriteError("Batchable subscriptions cannot be combined with merge policies. " +
                               "Merge policies are specified at a repository+branch level.");
             return Constants.ErrorCode;
         }
@@ -265,15 +269,15 @@ internal class AddSubscriptionOperation : SubscriptionOperationBase
                 var existingMergePolicies = await _barClient.GetRepositoryMergePoliciesAsync(targetRepository, targetBranch);
                 if (!existingMergePolicies.Any())
                 {
-                    Console.WriteLine("Warning: Batchable subscription doesn't have any repository merge policies. " +
+                    _consoleUI.WriteWarning("Batchable subscription doesn't have any repository merge policies. " +
                                       "PRs will not be auto-merged.");
-                    Console.WriteLine($"Please use 'darc set-repository-policies --repo {targetRepository} --branch {targetBranch}' " +
+                    _consoleUI.WriteLine($"Please use 'darc set-repository-policies --repo {targetRepository} --branch {targetBranch}' " +
                                       $"to set policies.{Environment.NewLine}");
                 }
 
                 if (!string.IsNullOrEmpty(failureNotificationTags))
                 {
-                    Console.WriteLine("Warning: Failure notification tags may be set, but are ignored on batched subscriptions.");
+                    _consoleUI.WriteWarning("Failure notification tags may be set, but are ignored on batched subscriptions.");
                 }
             }
 
@@ -285,7 +289,7 @@ internal class AddSubscriptionOperation : SubscriptionOperationBase
 
             if (!targetBranchExists)
             {
-                Console.WriteLine("Aborting subscription creation.");
+                _consoleUI.WriteWarning("Aborting subscription creation.");
                 return Constants.ErrorCode;
             }
 
@@ -296,7 +300,7 @@ internal class AddSubscriptionOperation : SubscriptionOperationBase
 
             if (!sourceRepositoryExists)
             {
-                Console.WriteLine("Aborting subscription creation.");
+                _consoleUI.WriteWarning("Aborting subscription creation.");
                 return Constants.ErrorCode;
             }
 
@@ -314,7 +318,7 @@ internal class AddSubscriptionOperation : SubscriptionOperationBase
                 }
                 catch (ArgumentException)
                 {
-                    Console.WriteLine("Aborting subscription creation.");
+                    _consoleUI.WriteWarning("Aborting subscription creation.");
                     return Constants.ErrorCode;
                 }
             }
@@ -362,7 +366,7 @@ internal class AddSubscriptionOperation : SubscriptionOperationBase
                     targetDirectory,
                     excludedAssets);
 
-                Console.WriteLine($"Successfully created new subscription with id '{newSubscription.Id}'.");
+                _consoleUI.WriteSuccess($"Successfully created new subscription with id '{newSubscription.Id}'.");
 
                 // Prompt the user to trigger the subscription unless they have explicitly disallowed it
                 if (!_options.NoTriggerOnCreate)
@@ -371,7 +375,7 @@ internal class AddSubscriptionOperation : SubscriptionOperationBase
                     if (triggerAutomatically)
                     {
                         await _barClient.TriggerSubscriptionAsync(newSubscription.Id);
-                        Console.WriteLine($"Subscription '{newSubscription.Id}' triggered.");
+                        _consoleUI.WriteInfo($"Subscription '{newSubscription.Id}' triggered.");
                     }
                 }
             }
@@ -379,17 +383,18 @@ internal class AddSubscriptionOperation : SubscriptionOperationBase
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (RestApiException e) when (e.Response.Status == (int) System.Net.HttpStatusCode.BadRequest)
         {
             // Could have been some kind of validation error (e.g. channel doesn't exist)
-            _logger.LogError($"Failed to create subscription: {e.Response.Content}");
+            _consoleUI.WriteError($"Failed to create subscription: {e.Response.Content}");
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError($"Failed to create subscription.");
             _logger.LogError(e, $"Failed to create subscription.");
             return Constants.ErrorCode;
         }

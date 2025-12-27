@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.DarcLib.HealthMetrics;
@@ -50,16 +51,19 @@ internal class GetHealthOperation : Operation
     private readonly IRemoteFactory _remoteFactory;
     private readonly IBarApiClient _barClient;
     private readonly ILogger<GetHealthOperation> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public GetHealthOperation(
         GetHealthCommandLineOptions options,
         IBarApiClient barClient,
         IRemoteFactory remoteFactory,
+        IConsoleUI consoleUI,
         ILogger<GetHealthOperation> logger)
     {
         _options = options;
         _barClient = barClient;
         _remoteFactory = remoteFactory;
+        _consoleUI = consoleUI;
         _logger = logger;
     }
 
@@ -80,33 +84,33 @@ internal class GetHealthOperation : Operation
 
             if (channelsToEvaluate.Count != 0)
             {
-                Console.WriteLine("Evaluating the following channels:");
+                _consoleUI.WriteInfo("Evaluating the following channels:");
                 foreach (string channel in channelsToEvaluate)
                 {
-                    Console.WriteLine($"  {channel}");
+                    _consoleUI.WriteLine($"  {channel}");
                 }
             }
             else
             {
-                Console.WriteLine($"There were no channels found to evaluate based on inputs, exiting.");
+                _consoleUI.WriteWarning($"There were no channels found to evaluate based on inputs, exiting.");
                 return Constants.ErrorCode;
             }
 
             if (reposToEvaluate.Count != 0)
             {
-                Console.WriteLine("Evaluating the following repositories:");
+                _consoleUI.WriteInfo("Evaluating the following repositories:");
                 foreach (string repo in reposToEvaluate)
                 {
-                    Console.WriteLine($"  {repo}");
+                    _consoleUI.WriteLine($"  {repo}");
                 }
             }
             else
             {
-                Console.WriteLine($"There were no repositories found to evaluate based on inputs, exiting.");
+                _consoleUI.WriteWarning($"There were no repositories found to evaluate based on inputs, exiting.");
                 return Constants.ErrorCode;
             }
 
-            Console.WriteLine();
+            _consoleUI.WriteLine();
 
             // Compute metrics, then run in parallel.
 
@@ -128,11 +132,11 @@ internal class GetHealthOperation : Operation
                     passed = false;
                 }
 
-                Console.WriteLine($"{healthResult.Metric.MetricDescription} - ({healthResult.Metric.Result})");
+                _consoleUI.WriteLine($"{healthResult.Metric.MetricDescription} - ({healthResult.Metric.Result})");
                 if (healthResult.Metric.Result != HealthResult.Passed)
                 {
-                    Console.WriteLine();
-                    Console.WriteLine(healthResult.FormattedConsoleOutput);
+                    _consoleUI.WriteLine();
+                    _consoleUI.WriteLine(healthResult.FormattedConsoleOutput);
                 }
             }
 
@@ -140,7 +144,7 @@ internal class GetHealthOperation : Operation
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
     }

@@ -4,6 +4,7 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options.VirtualMonoRepo;
 using Microsoft.DotNet.DarcLib.VirtualMonoRepo;
 using Microsoft.Extensions.Logging;
@@ -16,15 +17,18 @@ internal abstract class ScanOperationBase<T> : Operation where T : IVmrScanner
     private readonly IVmrScanOptions _options;
     private readonly IVmrScanner _vmrScanner;
     private readonly ILogger<ScanOperationBase<T>> _logger;
+    private readonly IConsoleUI _consoleUI;
 
     public ScanOperationBase(
         IVmrScanOptions options,
         IVmrScanner vmrScanner,
-        ILogger<ScanOperationBase<T>> logger)
+        ILogger<ScanOperationBase<T>> logger,
+        IConsoleUI consoleUI)
     {
         _options = options;
         _vmrScanner = vmrScanner;
         _logger = logger;
+        _consoleUI = consoleUI;
     }
 
     public override async Task<int> ExecuteAsync()
@@ -35,7 +39,7 @@ internal abstract class ScanOperationBase<T> : Operation where T : IVmrScanner
 
         foreach (var file in files)
         {
-            Console.WriteLine(file);
+            _consoleUI.WriteLine(file);
         }
 
         return files.Count != 0 ? 1 : Constants.SuccessCode;

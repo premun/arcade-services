@@ -9,6 +9,7 @@ using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.DotNet.Darc.Helpers;
+using Microsoft.DotNet.Darc.Helpers.ConsoleUI;
 using Microsoft.DotNet.Darc.Options;
 using Microsoft.DotNet.DarcLib;
 using Microsoft.DotNet.DarcLib.Helpers;
@@ -57,12 +58,14 @@ internal class AddBuildToChannelOperation : Operation
     private readonly IAzureDevOpsClient _azdoClient;
     private readonly IRemoteFactory _remoteFactory;
     private readonly IBarApiClient _barClient;
+    private readonly IConsoleUI _consoleUI;
 
     public AddBuildToChannelOperation(
         AddBuildToChannelCommandLineOptions options,
         IBarApiClient barClient,
         IAzureDevOpsClient azdoClient,
         IRemoteFactory remoteFactory,
+        IConsoleUI consoleUI,
         ILogger<AddBuildToChannelOperation> logger)
     {
         _options = options;
@@ -70,6 +73,7 @@ internal class AddBuildToChannelOperation : Operation
         _logger = logger;
         _azdoClient = azdoClient;
         _remoteFactory = remoteFactory;
+        _consoleUI = consoleUI;
     }
 
     /// <summary>
@@ -83,25 +87,25 @@ internal class AddBuildToChannelOperation : Operation
             var build = await _barClient.GetBuildAsync(_options.Id);
             if (build == null)
             {
-                Console.WriteLine($"Could not find a build with id '{_options.Id}'.");
+                _consoleUI.WriteError($"Could not find a build with id '{_options.Id}'.");
                 return Constants.ErrorCode;
             }
 
             if (string.IsNullOrEmpty(_options.Channel) && !_options.AddToDefaultChannels)
             {
-                Console.WriteLine("You need to use --channel or --default-channels to inform the channel(s) that the build should be promoted to.");
+                _consoleUI.WriteError("You need to use --channel or --default-channels to inform the channel(s) that the build should be promoted to.");
                 return Constants.ErrorCode;
             }
 
             if (_options.PublishingInfraVersion < 2 || _options.PublishingInfraVersion > 3)
             {
-                Console.WriteLine($"Publishing version '{_options.PublishingInfraVersion}' is not configured. The following versions are available: 2, 3");
+                _consoleUI.WriteError($"Publishing version '{_options.PublishingInfraVersion}' is not configured. The following versions are available: 2, 3");
                 return Constants.ErrorCode;
             }
 
             if (_options.PublishingInfraVersion > 2 && _options.DoSDLValidation)
             {
-                Console.WriteLine($"Publishing version '{_options.PublishingInfraVersion}' does not support running SDL when adding a build to a channel");
+                _consoleUI.WriteError($"Publishing version '{_options.PublishingInfraVersion}' does not support running SDL when adding a build to a channel");
                 return Constants.ErrorCode;
             }
 
@@ -142,31 +146,31 @@ internal class AddBuildToChannelOperation : Operation
             IEnumerable<Channel> currentChannels = build.Channels.Where(ch => targetChannels.Any(tc => tc.Id == ch.Id));
             if (currentChannels.Any())
             {
-                Console.WriteLine($"The build '{build.Id}' is already on these target channel(s):");
+                _consoleUI.WriteInfo($"The build '{build.Id}' is already on these target channel(s):");
 
                 foreach (var channel in currentChannels)
                 {
-                    Console.WriteLine($"\t{channel.Name}");
+                    _consoleUI.WriteLine($"\t{channel.Name}");
                     targetChannels.RemoveAll(tch => tch.Id == channel.Id);
                 }
             }
 
             if (targetChannels.Count == 0)
             {
-                Console.WriteLine($"Build '{build.Id}' is already on all target channel(s).");
+                _consoleUI.WriteInfo($"Build '{build.Id}' is already on all target channel(s).");
                 return Constants.SuccessCode;
             }
 
             if (targetChannels.Any(ch => UnsupportedChannels.ContainsKey(ch.Id)))
             {
-                Console.WriteLine($"Currently Darc doesn't support build promotion to the following channels:");
+                _consoleUI.WriteError($"Currently Darc doesn't support build promotion to the following channels:");
 
                 foreach (var channel in UnsupportedChannels)
                 {
-                    Console.WriteLine($"\t ({channel.Key}) {channel.Value}");
+                    _consoleUI.WriteLine($"\t ({channel.Key}) {channel.Value}");
                 }
 
-                Console.WriteLine("Please contact @dnceng to see other options.");
+                _consoleUI.WriteLine("Please contact @dnceng to see other options.");
                 return Constants.ErrorCode;
             }
 
@@ -184,13 +188,13 @@ internal class AddBuildToChannelOperation : Operation
             // Get the latest build information to verify the channels
             build = await _barClient.GetBuildAsync(build.Id);
 
-            Console.WriteLine($"Assigning build '{build.Id}' to the following channel(s):");
+            _consoleUI.WriteInfo($"Assigning build '{build.Id}' to the following channel(s):");
             foreach (var channel in targetChannels)
             {
-                Console.WriteLine($"\t{channel.Name}");
+                _consoleUI.WriteLine($"\t{channel.Name}");
             }
-            Console.WriteLine();
-            Console.Write(UxHelpers.GetTextBuildDescription(build));
+            _consoleUI.WriteLine();
+            _consoleUI.Write(UxHelpers.GetTextBuildDescription(build));
 
             // Be helpful. Let the user know what will happen.
             string buildRepo = build.GetRepository();
@@ -211,11 +215,12 @@ internal class AddBuildToChannelOperation : Operation
         }
         catch (AuthenticationException e)
         {
-            Console.WriteLine(e.Message);
+            _consoleUI.WriteError(e.Message);
             return Constants.ErrorCode;
         }
         catch (Exception e)
         {
+            _consoleUI.WriteError($"Failed to assign build '{_options.Id}' to channel '{_options.Channel}'.");
             _logger.LogError(e, $"Error: Failed to assign build '{_options.Id}' to channel '{_options.Channel}'.");
             return Constants.ErrorCode;
         }
@@ -228,7 +233,7 @@ internal class AddBuildToChannelOperation : Operation
             foreach (var targetChannel in targetChannels)
             {
                 await barClient.AssignBuildToChannelAsync(build.Id, targetChannel.Id);
-                Console.WriteLine($"Build {build.Id} was assigned to channel '{targetChannel.Name}' bypassing the promotion pipeline.");
+                _consoleUI.WriteSuccess($"Build {build.Id} was assigned to channel '{targetChannel.Name}' bypassing the promotion pipeline.");
             }
             return Constants.SuccessCode;
         }
@@ -255,7 +260,7 @@ internal class AddBuildToChannelOperation : Operation
                 build.AzureDevOpsAccount,
                 out (string project, int pipelineId) promotionPipelineInformation))
         {
-            Console.WriteLine($"Promoting builds from AzureDevOps account {build.AzureDevOpsAccount} is not supported by this command.");
+            _consoleUI.WriteError($"Promoting builds from AzureDevOps account {build.AzureDevOpsAccount} is not supported by this command.");
             return Constants.ErrorCode;
         }
 
@@ -295,11 +300,11 @@ internal class AddBuildToChannelOperation : Operation
 
         string promotionBuildUrl = $"https://dev.azure.com/{build.AzureDevOpsAccount}/{promotionPipelineInformation.project}/_build/results?buildId={azdoBuildId}";
 
-        Console.WriteLine($"Build {build.Id} will be assigned to target channel(s) once this build finishes publishing assets: {promotionBuildUrl}");
+        _consoleUI.WriteInfo($"Build {build.Id} will be assigned to target channel(s) once this build finishes publishing assets: {promotionBuildUrl}");
 
         if (_options.NoWait)
         {
-            Console.WriteLine("Returning before asset publishing and channel assignment finishes. The operation continues asynchronously in AzDO.");
+            _consoleUI.WriteInfo("Returning before asset publishing and channel assignment finishes. The operation continues asynchronously in AzDO.");
             return Constants.SuccessCode;
         }
 
@@ -310,7 +315,7 @@ internal class AddBuildToChannelOperation : Operation
 
             do
             {
-                Console.WriteLine($"Waiting '{waitIntervalInSeconds.TotalSeconds}' seconds for promotion build to complete.");
+                _consoleUI.WriteInfo($"Waiting '{waitIntervalInSeconds.TotalSeconds}' seconds for promotion build to complete.");
                 await Task.Delay(waitIntervalInSeconds);
                 promotionBuild = await _azdoClient.GetBuildAsync(
                     build.AzureDevOpsAccount,
@@ -320,7 +325,7 @@ internal class AddBuildToChannelOperation : Operation
         }
         catch (Exception e)
         {
-            Console.WriteLine($"Darc couldn't check status of the promotion build. {e.Message}");
+            _consoleUI.WriteError($"Darc couldn't check status of the promotion build. {e.Message}");
             return Constants.ErrorCode;
         }
 
@@ -328,13 +333,13 @@ internal class AddBuildToChannelOperation : Operation
 
         if (targetChannels.All(ch => build.Channels.Any(c => c.Id == ch.Id)))
         {
-            Console.WriteLine($"Build '{build.Id}' was successfully added to the target channel(s).");
+            _consoleUI.WriteSuccess($"Build '{build.Id}' was successfully added to the target channel(s).");
             return Constants.SuccessCode;
         }
         else
         {
-            Console.WriteLine("The promotion build finished but the build isn't associated with at least one of the target channels. This is an error scenario.");
-            Console.WriteLine($"Details are available in the following build: {promotionBuildUrl} For any questions, contact @dnceng");
+            _consoleUI.WriteError("The promotion build finished but the build isn't associated with at least one of the target channels. This is an error scenario.");
+            _consoleUI.WriteLine($"Details are available in the following build: {promotionBuildUrl} For any questions, contact @dnceng");
             return Constants.ErrorCode;
         }
     }
@@ -348,20 +353,20 @@ internal class AddBuildToChannelOperation : Operation
             // The build manifest is always necessary
             if (!artifacts.Any(f => f.Name.Equals("AssetManifests")))
             {
-                Console.Write("The build that you want to add to a new channel doesn't have a Build Manifest. That's required for publishing. Aborting.");
+                _consoleUI.WriteError("The build that you want to add to a new channel doesn't have a Build Manifest. That's required for publishing. Aborting.");
                 return false;
             }
 
             if ((_options.DoSigningValidation || _options.DoNuGetValidation || _options.DoSourcelinkValidation)
                 && !artifacts.Any(f => f.Name.Equals("PackageArtifacts")))
             {
-                Console.Write("The build that you want to add to a new channel doesn't have a list of package assets in the PackageArtifacts container. That's required when running signing or NuGet validation. Aborting.");
+                _consoleUI.WriteError("The build that you want to add to a new channel doesn't have a list of package assets in the PackageArtifacts container. That's required when running signing or NuGet validation. Aborting.");
                 return false;
             }
 
             if (_options.DoSourcelinkValidation && !artifacts.Any(f => f.Name.Equals("BlobArtifacts")))
             {
-                Console.Write("The build that you want to add to a new channel doesn't have a list of blob assets in the BlobArtifacts container. That's required when running SourceLink validation. Aborting.");
+                _consoleUI.WriteError("The build that you want to add to a new channel doesn't have a list of blob assets in the BlobArtifacts container. That's required when running SourceLink validation. Aborting.");
                 return false;
             }
 
@@ -369,13 +374,13 @@ internal class AddBuildToChannelOperation : Operation
         }
         catch (HttpRequestException e) when (e.StatusCode == HttpStatusCode.NotFound)
         {
-            Console.Write("The build that you want to add to a new channel isn't available in AzDO anymore. Aborting.");
+            _consoleUI.WriteError("The build that you want to add to a new channel isn't available in AzDO anymore. Aborting.");
             return false;
         }
         catch (HttpRequestException e) when (e.StatusCode == HttpStatusCode.Unauthorized)
         {
-            Console.WriteLine("Got permission denied response while trying to retrieve target build from Azure DevOps. Aborting.");
-            Console.Write("Please make sure that your Azure DevOps PAT has the build read and execute scopes set.");
+            _consoleUI.WriteError("Got permission denied response while trying to retrieve target build from Azure DevOps. Aborting.");
+            _consoleUI.WriteLine("Please make sure that your Azure DevOps PAT has the build read and execute scopes set.");
             return false;
         }
     }
@@ -397,8 +402,8 @@ internal class AddBuildToChannelOperation : Operation
 
             if (_options.SourceBranch.EndsWith("release/3.x", StringComparison.OrdinalIgnoreCase))
             {
-                Console.WriteLine($"Warning: Arcade branch {_options.SourceBranch} doesn't support build promotion. Please try specifiying --source-branch 'main'.");
-                Console.WriteLine("Switching source branch to Arcade main.");
+                _consoleUI.WriteWarning($"Arcade branch {_options.SourceBranch} doesn't support build promotion. Please try specifiying --source-branch 'main'.");
+                _consoleUI.WriteInfo("Switching source branch to Arcade main.");
                 return ("main", null);
             }
         }
@@ -409,7 +414,7 @@ internal class AddBuildToChannelOperation : Operation
         }
         else if (hasSourceSHA && !hasSourceBranch)
         {
-            Console.WriteLine("The `source-sha` parameter needs to be specified together with `source-branch`.");
+            _consoleUI.WriteError("The `source-sha` parameter needs to be specified together with `source-branch`.");
             return (null, null);
         }
         else if (hasSourceBranch)
@@ -430,7 +435,7 @@ internal class AddBuildToChannelOperation : Operation
 
         if (sourceBuildArcadeSDKDependency == null)
         {
-            Console.WriteLine("The target build doesn't have a dependency on Microsoft.DotNet.Arcade.Sdk.");
+            _consoleUI.WriteError("The target build doesn't have a dependency on Microsoft.DotNet.Arcade.Sdk.");
             return (null, null);
         }
 
@@ -441,7 +446,7 @@ internal class AddBuildToChannelOperation : Operation
 
         if (sourceBuildArcadeSDKDepAsset == null)
         {
-            Console.WriteLine($"Could not fetch information about Microsoft.DotNet.Arcade.Sdk asset version {sourceBuildArcadeSDKDependency.Version}.");
+            _consoleUI.WriteError($"Could not fetch information about Microsoft.DotNet.Arcade.Sdk asset version {sourceBuildArcadeSDKDependency.Version}.");
             return (null, null);
         }
 
@@ -449,24 +454,24 @@ internal class AddBuildToChannelOperation : Operation
 
         if (sourceBuildArcadeSDKDepBuild == null)
         {
-            Console.Write($"Could not find information (in BAR) about the build that produced Microsoft.DotNet.Arcade.Sdk version {sourceBuildArcadeSDKDependency.Version}.");
+            _consoleUI.WriteError($"Could not find information (in BAR) about the build that produced Microsoft.DotNet.Arcade.Sdk version {sourceBuildArcadeSDKDependency.Version}.");
             return (null, null);
         }
 
         if (sourceBuildArcadeSDKDepBuild.GitHubBranch.EndsWith("release/3.x", StringComparison.OrdinalIgnoreCase))
         {
-            Console.WriteLine("Warning: To promote a build that uses a 3.x version of Arcade SDK you need to inform the --source-branch 'main' parameter.");
-            Console.WriteLine("Switching source branch to Arcade main.");
+            _consoleUI.WriteWarning("To promote a build that uses a 3.x version of Arcade SDK you need to inform the --source-branch 'main' parameter.");
+            _consoleUI.WriteInfo("Switching source branch to Arcade main.");
             return ("main", null);
         }
 
         var oldestSupportedArcadeSDKDate = new DateTimeOffset(2020, 01, 28, 0, 0, 0, new TimeSpan(0, 0, 0));
         if (DateTimeOffset.Compare(sourceBuildArcadeSDKDepBuild.DateProduced, oldestSupportedArcadeSDKDate) < 0)
         {
-            Console.WriteLine($"The target build uses an SDK released in {sourceBuildArcadeSDKDepBuild.DateProduced}");
-            Console.WriteLine($"The target build needs to use an Arcade SDK 5.x.x version released after {oldestSupportedArcadeSDKDate} otherwise " +
+            _consoleUI.WriteError($"The target build uses an SDK released in {sourceBuildArcadeSDKDepBuild.DateProduced}");
+            _consoleUI.WriteLine($"The target build needs to use an Arcade SDK 5.x.x version released after {oldestSupportedArcadeSDKDate} otherwise " +
                               $"you must inform the `source-branch` / `source-sha` parameters to point to a specific Arcade build.");
-            Console.Write($"You can also pass the `skip-assets-publishing` parameter if all you want is to " +
+            _consoleUI.WriteLine($"You can also pass the `skip-assets-publishing` parameter if all you want is to " +
                           $"assign the build to a channel. Note, though, that this will not publish the build assets.");
             return (null, null);
         }
@@ -474,7 +479,7 @@ internal class AddBuildToChannelOperation : Operation
         return (sourceBuildArcadeSDKDepBuild.GitHubBranch, sourceBuildArcadeSDKDepBuild.Commit);
     }
 
-    private static void PrintSubscriptionInfo(List<Subscription> applicableSubscriptions)
+    private void PrintSubscriptionInfo(List<Subscription> applicableSubscriptions)
     {
         IEnumerable<Subscription> subscriptionsThatWillFlowImmediately = applicableSubscriptions.Where(s => s.Enabled &&
             s.Policy.UpdateFrequency == UpdateFrequency.EveryBuild);
@@ -485,30 +490,30 @@ internal class AddBuildToChannelOperation : Operation
         // Print out info
         if (subscriptionsThatWillFlowImmediately.Any())
         {
-            Console.WriteLine("The following repos/branches will apply this build immediately:");
+            _consoleUI.WriteInfo("The following repos/branches will apply this build immediately:");
             foreach (var sub in subscriptionsThatWillFlowImmediately)
             {
-                Console.WriteLine($"  {sub.TargetRepository} @ {sub.TargetBranch}");
+                _consoleUI.WriteLine($"  {sub.TargetRepository} @ {sub.TargetBranch}");
             }
         }
 
         if (subscriptionsThatWillFlowTomorrowOrNotAtAll.Any())
         {
-            Console.WriteLine("The following repos/branches will apply this change at a later time, or not by default.");
-            Console.WriteLine("To flow immediately, run the specified command");
+            _consoleUI.WriteInfo("The following repos/branches will apply this change at a later time, or not by default.");
+            _consoleUI.WriteLine("To flow immediately, run the specified command");
             foreach (var sub in subscriptionsThatWillFlowTomorrowOrNotAtAll)
             {
-                Console.WriteLine($"  {sub.TargetRepository} @ {sub.TargetBranch} (update freq: {sub.Policy.UpdateFrequency})");
-                Console.WriteLine($"    darc trigger-subscriptions --id {sub.Id}");
+                _consoleUI.WriteLine($"  {sub.TargetRepository} @ {sub.TargetBranch} (update freq: {sub.Policy.UpdateFrequency})");
+                _consoleUI.WriteLine($"    darc trigger-subscriptions --id {sub.Id}");
             }
         }
 
         if (disabledSubscriptions.Any())
         {
-            Console.WriteLine("The following repos/branches will not get this change because their subscriptions are disabled.");
+            _consoleUI.WriteWarning("The following repos/branches will not get this change because their subscriptions are disabled.");
             foreach (var sub in disabledSubscriptions)
             {
-                Console.WriteLine($"  {sub.TargetRepository} @ {sub.TargetBranch}");
+                _consoleUI.WriteLine($"  {sub.TargetRepository} @ {sub.TargetBranch}");
             }
         }
     }
