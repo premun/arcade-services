@@ -4,7 +4,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -58,7 +57,6 @@ public class VmrForwardFlower : VmrCodeFlower, IVmrForwardFlower
     private readonly ICodeFlowVmrUpdater _vmrUpdater;
     private readonly IVmrDependencyTracker _dependencyTracker;
     private readonly IVmrCloneManager _vmrCloneManager;
-    private readonly ILocalGitClient _localGitClient;
     private readonly ILocalGitRepoFactory _localGitRepoFactory;
     private readonly ICodeflowChangeAnalyzer _codeflowChangeAnalyzer;
     private readonly IForwardFlowConflictResolver _conflictResolver;
@@ -81,8 +79,8 @@ public class VmrForwardFlower : VmrCodeFlower, IVmrForwardFlower
             IWorkBranchFactory workBranchFactory,
             IProcessManager processManager,
             IBasicBarClient barClient,
-            IFileSystem fileSystem,
             ICommentCollector commentCollector,
+            IFileSystem fileSystem,
             ILogger<VmrCodeFlower> logger)
         : base(vmrInfo, sourceManifest, dependencyTracker, localGitClient, localGitRepoFactory, versionDetailsParser, fileSystem, logger)
     {
@@ -91,7 +89,6 @@ public class VmrForwardFlower : VmrCodeFlower, IVmrForwardFlower
         _vmrUpdater = vmrUpdater;
         _dependencyTracker = dependencyTracker;
         _vmrCloneManager = vmrCloneManager;
-        _localGitClient = localGitClient;
         _localGitRepoFactory = localGitRepoFactory;
         _codeflowChangeAnalyzer = codeflowChangeAnalyzer;
         _conflictResolver = conflictResolver;
@@ -250,47 +247,24 @@ public class VmrForwardFlower : VmrCodeFlower, IVmrForwardFlower
         CancellationToken cancellationToken)
     {
         var vmr = _localGitRepoFactory.Create(_vmrInfo.VmrPath);
-        IWorkBranch? workBranch = null;
-        if (codeflowOptions.EnableRebase || headBranchExisted)
-        {
-            await vmr.CheckoutAsync(lastFlows.LastFlow.VmrSha);
 
-            workBranch = await _workBranchFactory.CreateWorkBranchAsync(vmr, codeflowOptions.CurrentFlow.GetBranchName(), codeflowOptions.HeadBranch);
+        if (headBranchExisted)
+        {
+            await vmr.CheckoutAsync(codeflowOptions.HeadBranch);
+        }
+        else
+        {
+            await vmr.CheckoutAsync(codeflowOptions.TargetBranch);
+            await vmr.CreateBranchAsync(codeflowOptions.HeadBranch, overwriteExistingBranch: true);
         }
 
-        CodeFlowResult result = await ApplyChangesWithRecreationFallbackAsync(
-            codeflowOptions,
-            lastFlows,
-            sourceRepo,
-            headBranchExisted,
-            workBranch,
-            async keepConflicts =>
-                await _vmrUpdater.UpdateRepository(
-                    codeflowOptions.Mapping,
-                    codeflowOptions.Build,
-                    additionalFileExclusions: [.. DependencyFileManager.CodeflowDependencyFiles],
-                    resetToRemoteWhenCloningRepo: ShouldResetClones,
-                    keepConflicts: keepConflicts,
-                    cancellationToken: cancellationToken),
-            cancellationToken);
-
-        if (workBranch != null)
-        {
-            var commitMessage = (await vmr.RunGitCommandAsync(["log", "-1", "--pretty=%B"], cancellationToken)).StandardOutput;
-
-            result = result with
-            {
-                ConflictedFiles = await MergeWorkBranchAsync(
-                    codeflowOptions,
-                    vmr,
-                    workBranch,
-                    headBranchExisted,
-                    commitMessage,
-                    cancellationToken)
-            };
-        }
-
-        return result;
+        return await _vmrUpdater.UpdateRepository(
+            codeflowOptions.Mapping,
+            codeflowOptions.Build,
+            additionalFileExclusions: [.. DependencyFileManager.CodeflowDependencyFiles],
+            resetToRemoteWhenCloningRepo: ShouldResetClones,
+            keepConflicts: true,
+            cancellationToken: cancellationToken);
     }
 
     protected override async Task<CodeFlowResult> OppositeDirectionFlowAsync(
@@ -428,48 +402,6 @@ public class VmrForwardFlower : VmrCodeFlower, IVmrForwardFlower
         return await vmr.IsAncestorCommit(bf.VmrSha, lastForwardFlow.VmrSha)
             ? lastForwardFlow
             : null;
-    }
-
-    protected override async Task<(Codeflow, LastFlows)> UnwindPreviousFlowAsync(
-        SourceMapping mapping,
-        ILocalGitRepo sourceRepo,
-        LastFlows previousFlows,
-        string branchToCreate,
-        string targetBranch,
-        CancellationToken cancellationToken)
-    {
-        var vmr = _localGitRepoFactory.Create(_vmrInfo.VmrPath);
-
-        ForwardFlow previousFlow = previousFlow = previousFlows.LastForwardFlow;
-        await _vmrCloneManager.PrepareVmrAsync(
-            [_vmrInfo.VmrUri],
-            [previousFlow.VmrSha],
-            previousFlow.VmrSha,
-            resetToRemote: false,
-            cancellationToken);
-
-        await sourceRepo.ForceCheckoutAsync(previousFlow.RepoSha);
-
-        var previousFlowSha = await _localGitClient.BlameLineAsync(
-            _vmrInfo.SourceManifestPath,
-            line => line.Contains(previousFlow.RepoSha),
-            previousFlow.VmrSha);
-
-        await _localGitClient.ResetWorkingTree(_vmrInfo.VmrPath);
-        vmr = await _vmrCloneManager.PrepareVmrAsync(
-            [_vmrInfo.VmrUri],
-            [previousFlowSha],
-            previousFlowSha,
-            resetToRemote: false,
-            cancellationToken);
-
-        await sourceRepo.ForceCheckoutAsync(_sourceManifest.GetRepoVersion(mapping.Name).CommitSha);
-        previousFlows = await GetLastFlowsAsync(mapping.Name, sourceRepo, currentIsBackflow: false);
-        previousFlow = previousFlows.LastForwardFlow;
-
-        await vmr.CreateBranchAsync(branchToCreate, overwriteExistingBranch: true);
-
-        return (previousFlow, previousFlows);
     }
 
     protected override async Task EnsureCodeflowLinearityAsync(ILocalGitRepo repo, Codeflow currentFlow, LastFlows lastFlows)
