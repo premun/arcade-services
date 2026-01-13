@@ -314,7 +314,7 @@ public abstract class CodeFlowConflictResolver
                 cancellationToken: cancellationToken);
             _logger.LogDebug("Successfully auto-resolved a conflict in {filePath}", conflictedFile);
 
-            await targetRepo.ExecuteGitCommand(["restore", conflictedFile], cancellationToken);
+            await targetRepo.StageAsync([conflictedFile], cancellationToken);
 
             return true;
         }
@@ -405,8 +405,7 @@ public abstract class CodeFlowConflictResolver
             fromSha,
             toSha,
             path: null,
-            filters:
-            excludedFiles,
+            filters: excludedFiles,
             relativePaths: true,
             workingDir: codeflowOptions.CurrentFlow.IsForwardFlow
                 ? productRepo.Path
@@ -465,7 +464,7 @@ public abstract class CodeFlowConflictResolver
 
         foreach (var revertedFile in revertedFiles)
         {
-            _logger.LogInformation("Detected a revert in {file}. Fixing using a crossing flow...",
+            _logger.LogInformation("Suspecting a revert in {file}. Trying to fix it using a crossing flow...",
                 revertedFile);
 
             string contentBefore = await _fileSystem.ReadAllTextAsync(targetRepo.Path / revertedFile);
@@ -481,7 +480,7 @@ public abstract class CodeFlowConflictResolver
                 crossingFlow,
                 cancellationToken))
             {
-                _logger.LogError("Failed to auto-resolve a conflict in {file} while fixing a partial revert",
+                _logger.LogInformation("Failed to auto-resolve a conflict in {file} while fixing a partial revert",
                     revertedFile);
                 _fileSystem.WriteToFile(targetRepo.Path / revertedFile, contentBefore);
                 await targetRepo.StageAsync([revertedFile], cancellationToken);
