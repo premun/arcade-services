@@ -314,7 +314,7 @@ public abstract class CodeFlowConflictResolver
                 cancellationToken: cancellationToken);
             _logger.LogDebug("Successfully auto-resolved a conflict in {filePath}", conflictedFile);
 
-            await targetRepo.StageAsync([conflictedFile], cancellationToken);
+            await targetRepo.ExecuteGitCommand(["restore", conflictedFile], cancellationToken);
 
             return true;
         }
