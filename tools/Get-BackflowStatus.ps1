@@ -6,7 +6,7 @@
 .DESCRIPTION
     This script analyzes a VMR build to determine which repositories it has back-flowed to
     by checking backflow subscriptions and comparing build versions.
-    
+
     For internal release branches, it also looks up the corresponding public release branch
     to show both internal and public backflow status.
 
@@ -68,36 +68,39 @@ function Get-BuildChannel {
 
 function Test-IsInternalBranch {
     param([string]$Branch)
-    
+
     return $Branch -match "internal/"
 }
 
 function Get-PublicBranchFromInternal {
     param([string]$InternalBranch)
-    
+
     # Convert "internal/release/X.Y" to "release/X.Y"
     if ($InternalBranch -match "^internal/(.+)$") {
         return $matches[1]
     }
-    
+
     return $null
 }
 
-function Get-PublicChannelFromInternal {
-    param([string]$InternalChannel)
-    
-    # Internal channels typically have "-internal" suffix or similar pattern
-    # Try to derive the public channel name
-    if ($InternalChannel -match "^(.+)-internal$") {
-        return $matches[1]
+function Get-BackflowSubscriptions {
+    param($BuildInfo, [string]$ChannelName)
+
+    Write-ColorOutput "`nFetching backflow subscriptions for channel: $ChannelName..." -ForegroundColor Cyan
+
+    try {
+        $subscriptionsJson = darc get-subscriptions --channel "$ChannelName" --exact --source-repo "$($BuildInfo.repository)" --source-enabled true --output-format json
+        if ($subscriptionsJson.Trim() -eq "No subscriptions found matching the specified criteria.") {
+            Write-ColorOutput "No backflow subscriptions found for channel '$ChannelName'." -ForegroundColor Red
+            return @()
+        }
+        return $subscriptionsJson | ConvertFrom-Json
     }
-    
-    # If channel contains "Internal", try removing it
-    if ($InternalChannel -match "Internal") {
-        return $InternalChannel -replace "\s*Internal\s*", " " -replace "\s+", " " -replace "^\s+|\s+$", ""
+    catch {
+        Write-ColorOutput "Error: Failed to get subscriptions for channel $ChannelName" -ForegroundColor Red
+        Write-ColorOutput $_.Exception.Message -ForegroundColor Red
+        return @()
     }
-    
-    return $null
 }
 
 function Get-LatestBuildForChannel {
@@ -107,11 +110,11 @@ function Get-LatestBuildForChannel {
         [string]$Branch
     )
     
-    Write-ColorOutput "Looking up latest build for $Repository on branch $Branch in channel $Channel..." -ForegroundColor Cyan
+    Write-ColorOutput "Looking up latest build for $Repository on branch $Branch in channel $($Channel.name)..." -ForegroundColor Cyan
     
     try {
-        $builds = darc get-builds --repo $Repository --channel "$Channel" --output-format json 2>$null | ConvertFrom-Json
-        
+        $builds = darc get-latest-build --repo $Repository --channel "$($Channel.name)" --output-format json 2>$null | ConvertFrom-Json
+
         if ($builds -and $builds.Count -gt 0) {
             # Filter by branch if specified and find the latest
             $filteredBuilds = if ($Branch) {
@@ -129,23 +132,8 @@ function Get-LatestBuildForChannel {
         return $null
     }
     catch {
-        Write-ColorOutput "Warning: Could not fetch builds for channel $Channel" -ForegroundColor Yellow
+        Write-ColorOutput "Warning: Could not fetch builds for channel $($Channel.name)" -ForegroundColor Yellow
         return $null
-    }
-}
-
-function Get-BackflowSubscriptions {
-    param($BuildInfo, [string]$ChannelName)
-
-    Write-ColorOutput "`nFetching backflow subscriptions for channel: $ChannelName..." -ForegroundColor Cyan
-
-    try {
-        return darc get-subscriptions --channel "$ChannelName" --exact --source-repo "$($BuildInfo.repository)" --source-enabled true --output-format json | ConvertFrom-Json
-    }
-    catch {
-        Write-ColorOutput "Error: Failed to get subscriptions for channel $ChannelName" -ForegroundColor Red
-        Write-ColorOutput $_.Exception.Message -ForegroundColor Red
-        return @()
     }
 }
 
@@ -178,14 +166,14 @@ function Get-CommitDistance {
         [string]$FromCommit,
         [string]$ToCommit
     )
-    
+
     try {
         $count = git -C $VmrPath rev-list --count "$FromCommit..$ToCommit" 2>$null
-        
+
         if ($LASTEXITCODE -eq 0 -and $count -match '^\d+$') {
             return [int]$count
         }
-        
+
         return $null
     }
     catch {
@@ -228,9 +216,9 @@ function Get-BackflowStatusForBuild {
         $Subscriptions,
         [string]$BuildLabel
     )
-    
+
     $results = @()
-    
+
     foreach ($subscription in $Subscriptions) {
         $lastAppliedBuild = $subscription.lastAppliedBuild
 
@@ -290,21 +278,21 @@ function Get-BackflowStatusForBuild {
                 }
                 elseif ($isAncestor) {
                     $commitDistance = Get-CommitDistance -VmrPath $VmrPath -FromCommit $lastAppliedCommit -ToCommit $CurrentCommit
-                    
+
                     if ($commitDistance) {
                         # Apply color based on distance thresholds
-                        $distanceColor = if ($commitDistance -gt 20) { 
+                        $distanceColor = if ($commitDistance -gt 20) {
                             "`e[91m" # Red
-                        } elseif ($commitDistance -gt 10) { 
+                        } elseif ($commitDistance -gt 10) {
                             "`e[93m" # Yellow
-                        } else { 
+                        } else {
                             "`e[0m" # White/Reset
                         }
                         $distanceText = "$distanceColor$commitDistance commits behind`e[0m"
                     } else {
                         $distanceText = "behind"
                     }
-                    
+
                     $results += [PSCustomObject]@{
                         BuildLabel = $BuildLabel
                         SubscriptionId = $subscription.id
@@ -340,7 +328,7 @@ function Get-BackflowStatusForBuild {
             }
         }
     }
-    
+
     return $results
 }
 
@@ -381,22 +369,39 @@ $publicBuildInfo = $null
 $publicChannel = $null
 
 if ($isInternalBuild) {
-    Write-ColorOutput "`nDetected internal release branch - looking for corresponding public build..." -ForegroundColor Yellow
-    
+    Write-ColorOutput "`nDetected internal release branch - looking for corresponding public build..." -ForegroundColor Cyan
+
     $publicBranch = Get-PublicBranchFromInternal -InternalBranch $branch
-    $publicChannel = Get-PublicChannelFromInternal -InternalChannel $channel
-    
+    $publicChannel = $null
+
+    if ($publicBranch) {
+        try {
+            Write-ColorOutput "Looking up default channel for public branch $publicBranch..." -ForegroundColor Cyan
+            $defaultChannelsJson = darc get-default-channels --source-repo $buildInfo.repository --branch $publicBranch --output-format json 2>$null
+
+            if ($defaultChannelsJson) {
+                $defaultChannels = $defaultChannelsJson | ConvertFrom-Json
+                if ($defaultChannels -and $defaultChannels.Count -gt 0) {
+                    $publicChannel = $defaultChannels[0].channel
+                }
+            }
+        }
+        catch {
+            Write-ColorOutput "Warning: Could not determine public channel for branch $publicBranch" -ForegroundColor Yellow
+        }
+    }
+
     if ($publicBranch -and $publicChannel) {
         Write-ColorOutput "Public branch: $publicBranch" -ForegroundColor White
-        Write-ColorOutput "Public channel: $publicChannel" -ForegroundColor White
-        
+        Write-ColorOutput "Public channel: $($publicChannel.name)" -ForegroundColor White
+
         $publicBuildInfo = Get-LatestBuildForChannel -Repository $buildInfo.repository -Channel $publicChannel -Branch $publicBranch
-        
+
         if ($publicBuildInfo) {
             Write-ColorOutput "Found public build: $($publicBuildInfo.id) (commit: $($publicBuildInfo.commit))" -ForegroundColor Green
         }
         else {
-            Write-ColorOutput "Could not find a public build for branch $publicBranch in channel $publicChannel" -ForegroundColor Yellow
+            Write-ColorOutput "Could not find a public build for branch $publicBranch in channel $($publicChannel.name)" -ForegroundColor Red
         }
     }
     else {
@@ -405,14 +410,9 @@ if ($isInternalBuild) {
 }
 
 # Step 4: Get backflow subscriptions for primary (internal) build
-$backflowSubscriptions = Get-BackflowSubscriptions -BuildInfo $buildInfo -ChannelName "$channel"
+$backflowSubscriptions = Get-BackflowSubscriptions -BuildInfo $buildInfo -ChannelName "$($channel.name)"
 
-if ($backflowSubscriptions.Count -eq 0) {
-    Write-ColorOutput "`nNo backflow subscriptions found for channel: $channel" -ForegroundColor Yellow
-    exit 0
-}
-
-Write-ColorOutput "`nFound $($backflowSubscriptions.Count) backflow subscription(s) for primary build`n" -ForegroundColor Green
+Write-ColorOutput "`nFound $($backflowSubscriptions.Count) backflow subscription(s) for channel $($channel.name)`n" -ForegroundColor Green
 
 # Step 5: Get backflow status for primary build
 $buildLabel = if ($isInternalBuild) { "Internal" } else { "Primary" }
@@ -421,16 +421,18 @@ $allResults = Get-BackflowStatusForBuild -VmrPath $VmrPath -BuildInfo $buildInfo
 # Step 6: If we have a public build, get its backflow status too
 if ($publicBuildInfo -and $publicChannel) {
     $publicSubscriptions = Get-BackflowSubscriptions -BuildInfo $publicBuildInfo -ChannelName "$publicChannel"
-    
+
+    Write-ColorOutput "Found $($publicSubscriptions.Count) backflow subscription(s) for public build`n" -ForegroundColor Green
+
     if ($publicSubscriptions.Count -gt 0) {
-        Write-ColorOutput "Found $($publicSubscriptions.Count) backflow subscription(s) for public build`n" -ForegroundColor Green
-        
         $publicResults = Get-BackflowStatusForBuild -VmrPath $VmrPath -BuildInfo $publicBuildInfo -CurrentCommit $publicBuildInfo.commit -Subscriptions $publicSubscriptions -BuildLabel "Public"
         $allResults += $publicResults
     }
-    else {
-        Write-ColorOutput "No backflow subscriptions found for public channel: $publicChannel" -ForegroundColor Yellow
-    }
+}
+
+if ($allResults.Count -eq 0) {
+    Write-ColorOutput "No backflow results to display." -ForegroundColor Yellow
+    exit 0
 }
 
 # Display results
