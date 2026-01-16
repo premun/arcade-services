@@ -419,14 +419,14 @@ $buildLabel = if ($isInternalBuild) { "Internal" } else { "Primary" }
 $allResults = Get-BackflowStatusForBuild -VmrPath $VmrPath -BuildInfo $buildInfo -CurrentCommit $currentCommit -Subscriptions $backflowSubscriptions -BuildLabel $buildLabel
 
 # Step 6: If we have a public build, get its backflow status too
+$publicResults = @()
 if ($publicBuildInfo -and $publicChannel) {
-    $publicSubscriptions = Get-BackflowSubscriptions -BuildInfo $publicBuildInfo -ChannelName "$publicChannel"
+    $publicSubscriptions = Get-BackflowSubscriptions -BuildInfo $publicBuildInfo -ChannelName "$($publicChannel.name)"
 
     Write-ColorOutput "Found $($publicSubscriptions.Count) backflow subscription(s) for public build`n" -ForegroundColor Green
 
     if ($publicSubscriptions.Count -gt 0) {
         $publicResults = Get-BackflowStatusForBuild -VmrPath $VmrPath -BuildInfo $publicBuildInfo -CurrentCommit $publicBuildInfo.commit -Subscriptions $publicSubscriptions -BuildLabel "Public"
-        $allResults += $publicResults
     }
 }
 
@@ -439,25 +439,55 @@ if ($allResults.Count -eq 0) {
 Write-ColorOutput "`n=== Backflow Status Summary ===" -ForegroundColor Green
 
 if ($isInternalBuild) {
-    Write-ColorOutput "Internal Build: $BuildId (branch: $branch, channel: $channel)" -ForegroundColor Cyan
+    Write-ColorOutput "Internal Build: $BuildId (branch: $branch, channel: $($channel.name))" -ForegroundColor Cyan
     if ($publicBuildInfo) {
-        Write-ColorOutput "Public Build: $($publicBuildInfo.id) (branch: $($publicBuildInfo.branch -replace '^refs/heads/', ''), channel: $publicChannel)" -ForegroundColor Cyan
+        Write-ColorOutput "Public Build: $($publicBuildInfo.id) (branch: $($publicBuildInfo.branch -replace '^refs/heads/', ''), channel: $($publicChannel.name))" -ForegroundColor Cyan
     }
 }
 else {
-    Write-ColorOutput "Build: $BuildId (branch: $branch, channel: $channel)" -ForegroundColor Cyan
+    Write-ColorOutput "Build: $BuildId (branch: $branch, channel: $($channel.name))" -ForegroundColor Cyan
 }
 
 Write-ColorOutput ""
 
-# Add status symbols to results for table display
-$tableResults = $allResults | ForEach-Object {
-    [PSCustomObject]@{
-        Status = "$(Get-StatusSymbol -Status $_.Status)"
-        Build = $_.BuildLabel
-        TargetRepo = Get-SimplifiedRepoName -RepoUrl $_.TargetRepo
-        TargetBranch = $_.TargetBranch
-        Details = $_.Details
+# Build combined table with internal and public columns
+if ($isInternalBuild -and $publicBuildInfo) {
+    # Create a lookup for public results by target repo + branch
+    $publicResultsLookup = @{}
+    $publicResults | ForEach-Object {
+        $key = "$($_.TargetRepo)|$($_.TargetBranch)"
+        $publicResultsLookup[$key] = $_
+    }
+
+    # Create combined table rows
+    $tableResults = $allResults | ForEach-Object {
+        $repoName = Get-SimplifiedRepoName -RepoUrl $_.TargetRepo
+        $key = "$($_.TargetRepo)|$($_.TargetBranch)"
+        $publicResult = $publicResultsLookup[$key]
+
+        $internalStatus = "$(Get-StatusSymbol -Status $_.Status) $($_.Details)"
+        $publicStatus = if ($publicResult) {
+            "$(Get-StatusSymbol -Status $publicResult.Status) $($publicResult.Details)"
+        } else {
+            "$(Get-StatusSymbol -Status 'N/A') N/A"
+        }
+
+        [PSCustomObject]@{
+            TargetRepo = $repoName
+            TargetBranch = $_.TargetBranch
+            InternalStatus = $internalStatus
+            PublicStatus = $publicStatus
+        }
+    }
+}
+else {
+    # Single build mode - just show status column
+    $tableResults = $allResults | ForEach-Object {
+        [PSCustomObject]@{
+            TargetRepo = Get-SimplifiedRepoName -RepoUrl $_.TargetRepo
+            TargetBranch = $_.TargetBranch
+            Status = "$(Get-StatusSymbol -Status $_.Status) $($_.Details)"
+        }
     }
 }
 
